@@ -37,7 +37,7 @@ if (is_dir($geojsonDir)) {
         if ($id === 'mex-border') {
             continue;
         }
-        $layerFiles[$id] = 'data/' . $file;
+        $layerFiles[$id] = 'api/geojson.php?layer=' . rawurlencode($id);
     }
 }
 ?><!DOCTYPE html>
@@ -86,6 +86,15 @@ if (is_dir($geojsonDir)) {
         }
         .leaflet-tooltip.track-label .label-muted {
             color: rgba(0, 255, 0, 0.7);
+        }
+        .leaflet-tooltip.track-label .label-note {
+            cursor: text;
+            text-decoration: underline dotted;
+        }
+        .leaflet-tooltip.track-label .label-note.note-editing {
+            background: rgba(3, 11, 20, 0.75);
+            padding: 0 2px;
+            border-radius: 2px;
         }
         .leaflet-tooltip.track-label.highlight {
             background: rgba(3, 11, 20, 0.75);
@@ -236,6 +245,17 @@ if (is_dir($geojsonDir)) {
             border-radius: 4px;
             display: none;
         }
+        #feedStatus {
+            position: absolute;
+            top: 10px;
+            right: 340px;
+            background: rgba(14, 21, 32, 0.9);
+            color: #e0e0e0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            z-index: 1000;
+        }
         #tileStatus {
             position: absolute;
             top: 10px;
@@ -249,25 +269,54 @@ if (is_dir($geojsonDir)) {
             z-index: 1000;
         }
         #feedError {
-            right: 340px !important;
+            position: absolute;
+            top: 36px;
+            right: 340px;
+            background: rgba(176, 58, 46, 0.95);
+            color: #fff;
+            padding: 6px 8px;
+            border-radius: 4px;
+            z-index: 1000;
+            max-width: 360px;
+            display: none;
+            font-size: 12px;
+            align-items: center;
+            gap: 8px;
+        }
+        #feedError button {
+            background: #2b1b18;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 2px 6px;
+        }
+        #feedErrorText {
+            flex: 1;
         }
         body.sidebar-collapsed #feedError {
             right: 10px !important;
         }
+        body.sidebar-collapsed #feedStatus {
+            right: 10px !important;
+        }
         #errorOverlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: #b03a2e;
+            top: 70px;
+            right: 10px;
+            width: 360px;
+            background: rgba(14, 21, 32, 0.98);
             color: #fff;
-            padding: 6px 10px;
+            padding: 10px;
             font-size: 12px;
             z-index: 2000;
             display: none;
-            max-height: 160px;
+            max-height: 240px;
             overflow-y: auto;
             white-space: pre-wrap;
+            border: 1px solid #b03a2e;
+            border-radius: 6px;
         }
         #errorOverlay button {
             float: right;
@@ -318,7 +367,11 @@ if (is_dir($geojsonDir)) {
     <div id="map"></div>
     <button id="sidebarToggle" aria-label="Toggle sidebar">☰ Panel</button>
     <div id="tileStatus">Basemap fallback activated.</div>
-    <div id="feedError" style="display:none;position:absolute;top:10px;right:340px;background:#b03a2e;color:#fff;padding:6px 10px;border-radius:4px;z-index:1000;max-width:360px;"></div>
+    <div id="feedStatus">Feed: -- · Última actualización: --</div>
+    <div id="feedError">
+        <span id="feedErrorText"></span>
+        <button id="feedErrorDetails" type="button">Detalles</button>
+    </div>
     <div id="errorOverlay">
         <button id="diagnosticsClose" type="button">Cerrar</button>
         <pre id="diagnosticsContent"></pre>
@@ -495,6 +548,8 @@ if (is_dir($geojsonDir)) {
         healthDetail: null,
         leafletSource: 'unknown',
         leafletUrl: null,
+        feedStatus: 'unknown',
+        feedUpdatedAt: null,
     };
 
     function renderDiagnostics() {
@@ -504,14 +559,13 @@ if (is_dir($geojsonDir)) {
             diagnostics.healthDetail ? `Health detail: ${diagnostics.healthDetail}` : null,
             `Leaflet: ${diagnostics.leafletSource}`,
             diagnostics.leafletUrl ? `Leaflet URL: ${diagnostics.leafletUrl}` : null,
+            `Feed: ${diagnostics.feedStatus}`,
+            diagnostics.feedUpdatedAt ? `Feed updated: ${diagnostics.feedUpdatedAt}` : null,
         ].filter(Boolean);
         if (errorLog.length) {
             lines.push('', 'Errors:', ...errorLog);
         }
         diagnosticsContent.textContent = lines.join('\n');
-        if (errorLog.length && !diagnosticsDismissed) {
-            errorOverlay.style.display = 'block';
-        }
     }
 
     function reportError(message, detail) {
@@ -554,7 +608,7 @@ if (is_dir($geojsonDir)) {
         return detailLines.join('\n');
     }
 
-    function fetchJson(url, options, context) {
+    function fetchJson(url, options, context, allowedContentTypes = ['application/json']) {
         return fetch(url, options).then(async resp => {
             const bodyText = await resp.text().catch(() => '');
             if (!resp.ok) {
@@ -562,11 +616,13 @@ if (is_dir($geojsonDir)) {
                 error.status = resp.status;
                 error.statusText = resp.statusText;
                 error.url = url;
+                error.contentType = resp.headers.get('content-type') || '';
                 error.body = bodyText;
                 throw error;
             }
             const contentType = resp.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
+            const allowed = allowedContentTypes.some(type => contentType.includes(type));
+            if (!allowed) {
                 const error = new Error(`${context || 'Request failed'} (unexpected content-type)`);
                 error.status = resp.status;
                 error.statusText = resp.statusText;
@@ -590,7 +646,12 @@ if (is_dir($geojsonDir)) {
     }
 
     function fetchGeoJson(url, context) {
-        return fetchJson(url, {}, context).then(data => {
+        return fetchJson(
+            url,
+            { cache: 'no-store' },
+            context,
+            ['application/json', 'application/geo+json', 'application/vnd.geo+json']
+        ).then(data => {
             if (!data || !data.type) {
                 const error = new Error('GeoJSON missing type');
                 error.url = url;
@@ -667,8 +728,17 @@ if (is_dir($geojsonDir)) {
     const map = L.map('map', {
         zoomControl: true,
         attributionControl: true,
+        preferCanvas: true,
     }).setView([<?php echo $config['airport']['lat']; ?>, <?php echo $config['airport']['lon']; ?>], 8);
     const tileStatus = document.getElementById('tileStatus');
+    map.createPane('tracks');
+    map.createPane('targets');
+    map.createPane('labels');
+    map.getPane('tracks').style.zIndex = 350;
+    map.getPane('targets').style.zIndex = 450;
+    map.getPane('labels').style.zIndex = 650;
+    const trackRenderer = L.canvas({ padding: 0.5 });
+    const targetRenderer = L.canvas({ padding: 0.5 });
     const basemapConfig = {
         dark: {
             primary: '<?php echo $config['basemap_dark'] ?? $config['basemap']; ?>',
@@ -930,13 +1000,17 @@ if (is_dir($geojsonDir)) {
 
     // Flight data and interactions
     const flights = {}; // keyed by hex
-    const flightMarkers = {};
+    const flightMarkers = {}; // marker/vector/track/history/lastUpdate
     const flightStates = {};
     let selectedFlight = null;
+    const noteStore = loadNoteStore();
     const stripTray = document.getElementById('stripTray');
     const flightInfoDiv = document.getElementById('flightInfo');
     const notif = document.getElementById('notif');
     const feedError = document.getElementById('feedError');
+    const feedErrorText = document.getElementById('feedErrorText');
+    const feedErrorDetails = document.getElementById('feedErrorDetails');
+    const feedStatusEl = document.getElementById('feedStatus');
 
     const defaultSettings = {
         airport: {
@@ -1037,6 +1111,19 @@ if (is_dir($geojsonDir)) {
         const φ2 = Math.asin(Math.sin(φ1) * Math.cos(d / R) + Math.cos(φ1) * Math.sin(d / R) * Math.cos(θ));
         const λ2 = λ1 + Math.atan2(Math.sin(θ) * Math.sin(d / R) * Math.cos(φ1), Math.cos(d / R) - Math.sin(φ1) * Math.sin(φ2));
         return [φ2 * 180 / Math.PI, ((λ2 * 180 / Math.PI + 540) % 360) - 180];
+    }
+
+    function distanceNm(lat1, lon1, lat2, lon2) {
+        const R = 6371e3;
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2)
+            + Math.cos(φ1) * Math.cos(φ2)
+            * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return (R * c) / 1852;
     }
 
     const mexicoBounds = {
@@ -1162,6 +1249,56 @@ if (is_dir($geojsonDir)) {
         return data;
     }
 
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function loadNoteStore() {
+        try {
+            const raw = localStorage.getItem('adsb_notes');
+            const parsed = raw ? JSON.parse(raw) : {};
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (err) {
+            return {};
+        }
+    }
+
+    function persistNoteStore(store) {
+        try {
+            localStorage.setItem('adsb_notes', JSON.stringify(store));
+        } catch (err) {
+            // ignore storage errors
+        }
+    }
+
+    function saveNote(hex, note) {
+        if (!hex) {
+            return;
+        }
+        if (note) {
+            noteStore[hex] = note;
+        } else {
+            delete noteStore[hex];
+        }
+        persistNoteStore(noteStore);
+    }
+
+    function formatUpdateTime(ts) {
+        if (!ts) {
+            return '--';
+        }
+        const iso = new Date(ts).toISOString();
+        return `${iso.slice(11, 19)}Z`;
+    }
+
     // Add or update a flight marker on the map
     function getFlightStatus(hex) {
         return flightStates[hex] || 'normal';
@@ -1223,36 +1360,93 @@ if (is_dir($geojsonDir)) {
             return;
         }
         const el = tooltip.getElement();
-        if (!el || el.dataset.noteBound) {
+        if (!el) {
             return;
         }
-        el.dataset.noteBound = '1';
-        el.addEventListener('click', (event) => {
+        const noteEl = el.querySelector('.label-note');
+        if (!noteEl || noteEl.dataset.noteBound) {
+            return;
+        }
+        noteEl.dataset.noteBound = '1';
+        noteEl.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
             const ac = flights[hex];
             if (!ac) {
                 return;
             }
-            const current = ac.note || '';
-            const updated = window.prompt('Nota / O.P.M.E.T.', current);
-            if (updated === null) {
+            if (noteEl.dataset.editing === '1') {
                 return;
             }
-            ac.note = updated.trim();
-            const markerData = flightMarkers[hex];
-            if (markerData) {
-                markerData.marker.setTooltipContent(labelFromAc(ac));
-                updateTooltipClass(markerData.marker, ac);
-            }
-            if (selectedFlight === hex) {
-                const noteField = document.getElementById('noteField');
-                if (noteField) {
-                    noteField.value = ac.note || '';
+            noteEl.dataset.editing = '1';
+            noteEl.contentEditable = 'true';
+            noteEl.classList.add('note-editing');
+            noteEl.focus();
+            document.execCommand('selectAll', false, null);
+            const finish = (commit) => {
+                noteEl.dataset.editing = '0';
+                noteEl.contentEditable = 'false';
+                noteEl.classList.remove('note-editing');
+                noteEl.removeEventListener('keydown', onKey);
+                if (commit) {
+                    const updated = noteEl.textContent.trim();
+                    ac.note = updated;
+                    saveNote(hex, updated);
+                } else {
+                    noteEl.textContent = ac.note || '---';
                 }
-            }
-            updateStrips();
+                const markerData = flightMarkers[hex];
+                if (markerData) {
+                    markerData.marker.setTooltipContent(labelFromAc(ac));
+                    updateTooltipClass(markerData.marker, ac);
+                }
+                if (selectedFlight === hex) {
+                    const noteField = document.getElementById('noteField');
+                    if (noteField) {
+                        noteField.value = ac.note || '';
+                    }
+                }
+                updateStrips();
+            };
+            const onKey = (evt) => {
+                if (evt.key === 'Enter') {
+                    evt.preventDefault();
+                    finish(true);
+                } else if (evt.key === 'Escape') {
+                    evt.preventDefault();
+                    finish(false);
+                }
+            };
+            noteEl.addEventListener('keydown', onKey);
+            noteEl.addEventListener('blur', () => finish(true), { once: true });
         });
+    }
+
+    function shouldAppendTrackPoint(history, ac) {
+        if (!history.length) {
+            return true;
+        }
+        const last = history[history.length - 1];
+        const delta = distanceNm(last.lat, last.lon, ac.lat, ac.lon);
+        const headingDelta = Math.abs(((ac.track || 0) - (last.track || 0) + 540) % 360 - 180);
+        return delta >= 0.2 || headingDelta >= 15;
+    }
+
+    function updateTrackHistory(state, ac) {
+        const now = Date.now();
+        if (!state.history) {
+            state.history = [];
+        }
+        if (shouldAppendTrackPoint(state.history, ac)) {
+            state.history.push({ lat: ac.lat, lon: ac.lon, ts: now, track: ac.track || 0 });
+        }
+        const cutoff = now - 5 * 60 * 1000;
+        state.history = state.history.filter(pt => pt.ts >= cutoff);
+        const maxPoints = 35;
+        if (state.history.length > maxPoints) {
+            state.history = state.history.slice(state.history.length - maxPoints);
+        }
+        return state.history;
     }
 
     function renderFlight(ac) {
@@ -1265,6 +1459,7 @@ if (is_dir($geojsonDir)) {
         const status = getFlightStatus(id);
         const color = flightColor(status);
         if (existing) {
+            existing.lastUpdate = Date.now();
             existing.marker.setLatLng(pos);
             existing.vector.setLatLngs([pos, predicted]);
             existing.marker.setTooltipContent(labelFromAc(ac));
@@ -1277,19 +1472,37 @@ if (is_dir($geojsonDir)) {
             existing.marker.setStyle({ color, fillColor: color, opacity: status === 'released' ? 0.6 : 1 });
             existing.vector.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
             existing.marker.setTooltipOpacity(shouldShowLabel(ac) ? 1 : 0);
+            const history = updateTrackHistory(existing, ac);
+            if (existing.track) {
+                existing.track.setLatLngs(history.map(pt => [pt.lat, pt.lon]));
+                existing.track.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
+            }
             updateTooltipClass(existing.marker, ac);
+            bindLabelNoteEditor(existing.marker, id);
         } else {
             const marker = L.circleMarker(pos, {
                 radius: 4,
                 color,
                 fillColor: color,
                 fillOpacity: 1,
+                renderer: targetRenderer,
+                pane: 'targets',
             }).addTo(map);
             const vector = L.polyline([pos, predicted], {
                 color,
                 weight: 1.0,
                 opacity: status === 'released' ? 0.3 : 0.7,
-                dashArray: '4 4'
+                dashArray: '4 4',
+                renderer: targetRenderer,
+                pane: 'targets',
+            }).addTo(map);
+            const history = updateTrackHistory({ history: [] }, ac);
+            const track = L.polyline(history.map(pt => [pt.lat, pt.lon]), {
+                color,
+                weight: 1.0,
+                opacity: status === 'released' ? 0.3 : 0.7,
+                renderer: trackRenderer,
+                pane: 'tracks',
             }).addTo(map);
             const placement = labelPlacement(ac);
             marker.bindTooltip(labelFromAc(ac), {
@@ -1298,6 +1511,7 @@ if (is_dir($geojsonDir)) {
                 permanent: true,
                 interactive: true,
                 className: 'track-label',
+                pane: 'labels',
             });
             marker.setTooltipOpacity(shouldShowLabel(ac) ? 1 : 0);
             marker.on('click', () => selectFlight(id));
@@ -1305,7 +1519,7 @@ if (is_dir($geojsonDir)) {
                 bindLabelNoteEditor(marker, id);
                 updateTooltipClass(marker, ac);
             });
-            flightMarkers[id] = { marker, vector };
+            flightMarkers[id] = { marker, vector, track, history, lastUpdate: Date.now() };
         }
     }
 
@@ -1313,7 +1527,7 @@ if (is_dir($geojsonDir)) {
     function labelFromAc(ac) {
         const callsign = ac.flight ? ac.flight.trim().toUpperCase() : ac.hex;
         const type = ac.type || ac.aircraft_type || '';
-        const line1 = `${callsign}${type ? ` ${type}` : ''}`;
+        const line1 = `${escapeHtml(callsign)}${type ? ` ${escapeHtml(type)}` : ''}`;
         const alt = settings.labels.show_alt && ac.alt !== null && ac.alt !== undefined ? `${ac.alt}FT` : 'ALT ---';
         const gs = settings.labels.show_gs && ac.gs !== null && ac.gs !== undefined ? `${ac.gs}KT` : 'SPD ---';
         const line2 = `${alt}  ${gs}`;
@@ -1328,8 +1542,8 @@ if (is_dir($geojsonDir)) {
         const trkText = settings.labels.show_trk && ac.track !== null && ac.track !== undefined ? `TRK ${ac.track}°` : 'TRK ---';
         const line3 = `${vsText}  ${trkText}`;
         const sqk = settings.labels.show_sqk && ac.squawk ? `SQK ${ac.squawk}` : 'SQK ----';
-        const note = ac.note ? `NOTE ${ac.note}` : 'NOTE ---';
-        const line4 = `${sqk}  ${note}`;
+        const note = ac.note ? escapeHtml(ac.note) : '---';
+        const line4 = `${sqk}  NOTE: <span class="label-note" data-hex="${escapeHtml(ac.hex || '')}">${note}</span>`;
         return [
             `<span class="label-line">${line1}</span>`,
             `<span class="label-line">${line2}</span>`,
@@ -1348,23 +1562,32 @@ if (is_dir($geojsonDir)) {
         });
     }
 
-    // Remove stale flights (not updated in last poll)
-    function pruneFlights(seenIds) {
+    // Remove stale flights (not updated recently)
+    function pruneFlights() {
+        const now = Date.now();
         Object.keys(flightMarkers).forEach(id => {
-            if (!seenIds.has(id)) {
-                map.removeLayer(flightMarkers[id].marker);
-                map.removeLayer(flightMarkers[id].vector);
-                delete flightMarkers[id];
-                delete flights[id];
-                if (selectedFlight === id) {
-                    selectedFlight = null;
-                    flightInfoDiv.textContent = 'Click a flight to see details.';
-                }
-                // Remove from strip tray if not assumed
-                const stripEl = document.querySelector('.strip[data-hex="' + id + '"]');
-                if (stripEl && !stripEl.classList.contains('assumed')) {
-                    stripEl.remove();
-                }
+            const state = flightMarkers[id];
+            if (!state || !state.lastUpdate) {
+                return;
+            }
+            if (now - state.lastUpdate <= 90 * 1000) {
+                return;
+            }
+            map.removeLayer(state.marker);
+            map.removeLayer(state.vector);
+            if (state.track) {
+                map.removeLayer(state.track);
+            }
+            delete flightMarkers[id];
+            delete flights[id];
+            if (selectedFlight === id) {
+                selectedFlight = null;
+                flightInfoDiv.textContent = 'Click a flight to see details.';
+            }
+            // Remove from strip tray if not assumed
+            const stripEl = document.querySelector('.strip[data-hex="' + id + '"]');
+            if (stripEl && !stripEl.classList.contains('assumed')) {
+                stripEl.remove();
             }
         });
     }
@@ -1499,6 +1722,7 @@ if (is_dir($geojsonDir)) {
         document.getElementById('saveNoteBtn').addEventListener('click', () => {
             const text = document.getElementById('noteField').value.trim();
             flights[hex].note = text;
+            saveNote(hex, text);
             // Immediately update tooltip with note
             const existing = flightMarkers[hex];
             if (existing) {
@@ -1518,6 +1742,9 @@ if (is_dir($geojsonDir)) {
             const color = flightColor('assumed');
             markerData.marker.setStyle({ color, fillColor: color });
             markerData.vector.setStyle({ color });
+            if (markerData.track) {
+                markerData.track.setStyle({ color });
+            }
         }
         const strip = document.querySelector('.strip[data-hex="' + hex + '"]');
         if (strip) {
@@ -1539,6 +1766,9 @@ if (is_dir($geojsonDir)) {
             const color = flightColor('released');
             markerData.marker.setStyle({ color, fillColor: color, opacity: 0.6 });
             markerData.vector.setStyle({ color, opacity: 0.3 });
+            if (markerData.track) {
+                markerData.track.setStyle({ color, opacity: 0.3 });
+            }
         }
         const strip = document.querySelector('.strip[data-hex="' + hex + '"]');
         if (strip) {
@@ -1622,8 +1852,8 @@ if (is_dir($geojsonDir)) {
 
     function showFeedError(message) {
         if (message) {
-            feedError.textContent = message;
-            feedError.style.display = 'block';
+            feedErrorText.textContent = message;
+            feedError.style.display = 'flex';
         } else {
             feedError.style.display = 'none';
         }
@@ -1766,44 +1996,92 @@ if (is_dir($geojsonDir)) {
     });
 
     // Poll feed.php for live data
+    let pollTimer = null;
+    let pollInFlight = false;
+    let pollAbort = null;
+    const pollBackoffSteps = [1000, 2000, 5000, 10000];
+    let pollBackoffIndex = 0;
+    let lastFeedUpdate = null;
+
+    function scheduleNextPoll(delayMs) {
+        if (pollTimer) {
+            clearTimeout(pollTimer);
+        }
+        pollTimer = setTimeout(() => {
+            pollFeed();
+        }, delayMs);
+    }
+
+    function updateFeedStatus(status, message) {
+        diagnostics.feedStatus = status;
+        diagnostics.feedUpdatedAt = lastFeedUpdate ? formatUpdateTime(lastFeedUpdate) : null;
+        const timeText = lastFeedUpdate ? formatUpdateTime(lastFeedUpdate) : '--';
+        feedStatusEl.textContent = `Feed: ${status} · Última actualización: ${timeText}`;
+        showFeedError(message);
+        renderDiagnostics();
+    }
+
     function pollFeed() {
         if (document.hidden) {
+            scheduleNextPoll(Math.max(1000, settings.poll_interval_ms || 1500));
             return;
         }
+        if (pollInFlight) {
+            return;
+        }
+        pollInFlight = true;
+        if (pollAbort) {
+            pollAbort.abort();
+        }
+        pollAbort = new AbortController();
         const radius = Math.min(250, settings.radius_nm || 250);
         const url = buildUrl('feed.php') + '?lat=' + encodeURIComponent(settings.airport.lat) + '&lon=' + encodeURIComponent(settings.airport.lon) + '&radius_nm=' + encodeURIComponent(radius);
-        fetchJson(url, {}, 'Feed request')
+        fetchJson(url, { signal: pollAbort.signal }, 'Feed request')
             .then(data => {
-                if (!data.ok) {
-                    showFeedError(data.error || 'Upstream feed unavailable.');
-                } else {
-                    showFeedError('');
+                if (!data || !data.ok) {
+                    const message = (data && data.error) ? data.error : 'Upstream feed unavailable.';
+                    updateFeedStatus('DEGRADED', message);
+                    reportError('Feed degraded', message);
+                    pollBackoffIndex = Math.min(pollBackoffIndex + 1, pollBackoffSteps.length - 1);
+                    return;
                 }
-                const seen = new Set();
+                lastFeedUpdate = Date.now();
+                pollBackoffIndex = 0;
+                updateFeedStatus('OK', '');
                 (data.ac || []).forEach(ac => {
-                    flights[ac.hex] = ac;
-                    seen.add(ac.hex);
-                    renderFlight(ac);
+                    const previous = flights[ac.hex] || {};
+                    const note = previous.note || noteStore[ac.hex] || ac.note || '';
+                    flights[ac.hex] = { ...previous, ...ac, note };
+                    renderFlight(flights[ac.hex]);
                 });
-                pruneFlights(seen);
+                pruneFlights();
                 updateStrips();
                 updateLabelVisibility();
             })
             .catch(err => {
+                if (err && err.name === 'AbortError') {
+                    return;
+                }
                 console.error('Error fetching feed:', err);
-                showFeedError('Feed error – check console.');
+                updateFeedStatus('DEGRADED', 'Feed error – check diagnostics.');
+                pollBackoffIndex = Math.min(pollBackoffIndex + 1, pollBackoffSteps.length - 1);
+            })
+            .finally(() => {
+                pollInFlight = false;
+                const nextDelay = pollBackoffIndex > 0
+                    ? pollBackoffSteps[pollBackoffIndex]
+                    : Math.max(500, settings.poll_interval_ms || 1500);
+                scheduleNextPoll(nextDelay);
             });
     }
 
-    let pollTimer = null;
     function startPolling() {
         if (pollTimer) {
-            clearInterval(pollTimer);
+            clearTimeout(pollTimer);
             pollTimer = null;
         }
+        pollBackoffIndex = 0;
         pollFeed();
-        const interval = Math.max(500, settings.poll_interval_ms || 1500);
-        pollTimer = setInterval(pollFeed, interval);
     }
 
     // Settings panel toggling
@@ -1816,6 +2094,11 @@ if (is_dir($geojsonDir)) {
     diagnosticsClose.addEventListener('click', () => {
         diagnosticsDismissed = true;
         errorOverlay.style.display = 'none';
+    });
+    feedErrorDetails.addEventListener('click', () => {
+        diagnosticsDismissed = false;
+        renderDiagnostics();
+        errorOverlay.style.display = 'block';
     });
 
     function setSidebarCollapsed(collapsed) {
