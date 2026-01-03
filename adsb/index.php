@@ -34,6 +34,9 @@ if (is_dir($geojsonDir)) {
             continue;
         }
         $id = pathinfo($file, PATHINFO_FILENAME);
+        if ($id === 'mex-border') {
+            continue;
+        }
         $layerFiles[$id] = 'data/' . $file;
     }
 }
@@ -72,6 +75,9 @@ if (is_dir($geojsonDir)) {
             font-weight: bold;
             white-space: nowrap;
             text-transform: uppercase;
+            background: rgba(3, 11, 20, 0.7);
+            border: 1px solid rgba(0, 255, 0, 0.4);
+            box-shadow: none;
         }
         #map {
             position: absolute;
@@ -79,6 +85,9 @@ if (is_dir($geojsonDir)) {
             left: 0;
             right: 320px;
             height: 100vh;
+        }
+        body.sidebar-collapsed #map {
+            right: 0;
         }
         .leaflet-container img,
         .leaflet-container .leaflet-tile {
@@ -95,6 +104,25 @@ if (is_dir($geojsonDir)) {
             overflow-y: auto;
             padding: 10px;
             box-sizing: border-box;
+            transition: transform 0.2s ease;
+        }
+        body.sidebar-collapsed #sidebar {
+            transform: translateX(100%);
+        }
+        #sidebarToggle {
+            position: absolute;
+            top: 10px;
+            right: 330px;
+            z-index: 1200;
+            background: #1a2330;
+            color: #e0e0e0;
+            border: 1px solid #3f5270;
+            border-radius: 4px;
+            padding: 6px 8px;
+            cursor: pointer;
+        }
+        body.sidebar-collapsed #sidebarToggle {
+            right: 10px;
         }
         #sidebar h2 {
             margin-top: 0;
@@ -127,18 +155,50 @@ if (is_dir($geojsonDir)) {
             margin-top: 10px;
         }
         .strip {
-            background: #243752;
+            background: #1d2d44;
             border: 1px solid #3f5270;
             padding: 6px;
             margin-bottom: 6px;
             cursor: pointer;
         }
         .strip.assumed {
-            border-color: #007acc;
-            background: #28446d;
+            border-color: #00c1ff;
+            background: #1c4058;
         }
         .strip.released {
             opacity: 0.5;
+            border-color: #5c6b7a;
+        }
+        .strip .strip-header {
+            font-weight: bold;
+            color: #e6f7ff;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .strip .strip-meta {
+            font-size: 12px;
+            color: #c7d5e0;
+        }
+        .strip .strip-meta span {
+            display: inline-block;
+            margin-right: 6px;
+        }
+        .strip .strip-status {
+            font-size: 11px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #2b3a50;
+            color: #d0e6ff;
+        }
+        .strip.assumed .strip-status {
+            background: #00c1ff;
+            color: #041a24;
+        }
+        .strip.released .strip-status {
+            background: #4b5563;
+            color: #d1d5db;
         }
         #notif {
             position: absolute;
@@ -162,6 +222,12 @@ if (is_dir($geojsonDir)) {
             display: none;
             font-size: 12px;
             z-index: 1000;
+        }
+        #feedError {
+            right: 340px !important;
+        }
+        body.sidebar-collapsed #feedError {
+            right: 10px !important;
         }
         #errorOverlay {
             position: fixed;
@@ -210,12 +276,18 @@ if (is_dir($geojsonDir)) {
 </head>
 <body>
     <div id="map"></div>
+    <button id="sidebarToggle" aria-label="Toggle sidebar">☰ Panel</button>
     <div id="tileStatus">Basemap fallback activated.</div>
     <div id="feedError" style="display:none;position:absolute;top:10px;right:340px;background:#b03a2e;color:#fff;padding:6px 10px;border-radius:4px;z-index:1000;max-width:360px;"></div>
     <div id="errorOverlay"></div>
     <div id="sidebar">
         <h2>Airspace Layers</h2>
         <div id="layerControls"></div>
+        <h2>Tools</h2>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+            <button id="brlToggle" style="flex:1;">BRL</button>
+            <button id="brlClear" style="flex:1;">Clear BRL</button>
+        </div>
         <h2>Flight Strips</h2>
         <div id="stripTray"></div>
         <h2>Selected Flight</h2>
@@ -259,6 +331,19 @@ if (is_dir($geojsonDir)) {
                 <input type="color" id="labelColour" value="#00ff00" style="margin-left:4px;"/>
             </label>
             <label style="display:block;margin-bottom:4px;">
+                <input type="checkbox" id="showLabels" checked/>
+                Show Track Labels
+            </label>
+            <label style="display:block;margin-bottom:4px;">Label Min Zoom
+                <input type="number" id="labelMinZoom" min="3" max="14" value="7" style="width:60px;margin-left:4px;"/>
+            </label>
+            <label style="display:block;margin-bottom:4px;">Basemap Style
+                <select id="basemapSelect" style="margin-left:4px;">
+                    <option value="dark">Dark (Radar)</option>
+                    <option value="light">Light</option>
+                </select>
+            </label>
+            <label style="display:block;margin-bottom:4px;">
                 <input type="checkbox" id="showAltitude" checked/>
                 Show Altitude
             </label>
@@ -278,6 +363,26 @@ if (is_dir($geojsonDir)) {
                 <input type="checkbox" id="showSquawk" checked/>
                 Show Squawk
             </label>
+            <div class="settings-section">
+                <strong>Navpoints</strong>
+                <label style="display:block;margin-bottom:4px;">
+                    <input type="checkbox" id="navpointsEnabled" checked/>
+                    Show Navpoints
+                </label>
+                <label style="display:block;margin-bottom:4px;">Navpoints Min Zoom
+                    <input type="number" id="navpointsMinZoom" min="3" max="14" value="7" style="width:60px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Navpoints Zone
+                    <select id="navpointsZone" style="margin-left:4px;">
+                        <option value="all">Todo México</option>
+                        <option value="nw">NW México</option>
+                        <option value="mmtj-120">Entorno MMTJ (120 NM)</option>
+                    </select>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Max Navpoints
+                    <input type="number" id="navpointsMax" min="250" max="5000" value="2000" style="width:70px;margin-left:4px;"/>
+                </label>
+            </div>
             <div class="settings-section">
                 <strong>Category Styles (future)</strong>
                 <div style="font-size:12px;color:#9fb3c8;margin-top:4px;">
@@ -382,6 +487,9 @@ if (is_dir($geojsonDir)) {
         if (err.status) {
             detailLines.push(`HTTP ${err.status}${err.statusText ? ` ${err.statusText}` : ''}`);
         }
+        if (err.contentType) {
+            detailLines.push(`Content-Type: ${err.contentType}`);
+        }
         if (err.message) {
             detailLines.push(`Error: ${err.message}`);
         }
@@ -393,19 +501,47 @@ if (is_dir($geojsonDir)) {
 
     function fetchJson(url, options, context) {
         return fetch(url, options).then(async resp => {
+            const bodyText = await resp.text().catch(() => '');
             if (!resp.ok) {
-                const body = await resp.text().catch(() => '');
                 const error = new Error(`${context || 'Request failed'} (${resp.status}) ${resp.statusText}`);
                 error.status = resp.status;
                 error.statusText = resp.statusText;
                 error.url = url;
-                error.body = body;
+                error.body = bodyText;
                 throw error;
             }
-            return resp.json();
+            const contentType = resp.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const error = new Error(`${context || 'Request failed'} (unexpected content-type)`);
+                error.status = resp.status;
+                error.statusText = resp.statusText;
+                error.url = url;
+                error.contentType = contentType;
+                error.body = bodyText;
+                throw error;
+            }
+            try {
+                return JSON.parse(bodyText);
+            } catch (err) {
+                const error = new Error(`${context || 'Request failed'} (invalid JSON)`);
+                error.url = url;
+                error.body = bodyText;
+                throw error;
+            }
         }).catch(err => {
             reportError(context || 'Fetch error', formatFetchErrorDetail(err, url));
             throw err;
+        });
+    }
+
+    function fetchGeoJson(url, context) {
+        return fetchJson(url, {}, context).then(data => {
+            if (!data || !data.type) {
+                const error = new Error('GeoJSON missing type');
+                error.url = url;
+                throw error;
+            }
+            return data;
         });
     }
 
@@ -480,30 +616,79 @@ if (is_dir($geojsonDir)) {
         attributionControl: true,
     }).setView([<?php echo $config['airport']['lat']; ?>, <?php echo $config['airport']['lon']; ?>], 8);
     const tileStatus = document.getElementById('tileStatus');
-    const primaryTiles = L.tileLayer('<?php echo $config['basemap']; ?>', {
-        maxZoom: 18,
-        attribution: '<?php echo addslashes($config['basemap_attribution']); ?>',
-    });
-    const fallbackTiles = L.tileLayer('<?php echo $config['basemap_fallback']; ?>', {
-        maxZoom: 18,
-        attribution: '<?php echo addslashes($config['basemap_fallback_attribution']); ?>',
-    });
-    let tileErrors = 0;
-    primaryTiles.on('tileerror', () => {
-        tileErrors += 1;
-        if (tileErrors >= 5 && !map.hasLayer(fallbackTiles)) {
-            map.removeLayer(primaryTiles);
-            fallbackTiles.addTo(map);
-            tileStatus.style.display = 'block';
+    const basemapConfig = {
+        dark: {
+            primary: '<?php echo $config['basemap_dark'] ?? $config['basemap']; ?>',
+            fallback: '<?php echo $config['basemap_dark_fallback'] ?? $config['basemap_fallback']; ?>',
+            attribution: '<?php echo addslashes($config['basemap_dark_attribution'] ?? $config['basemap_attribution']); ?>',
+            fallbackAttribution: '<?php echo addslashes($config['basemap_dark_fallback_attribution'] ?? $config['basemap_fallback_attribution']); ?>',
+        },
+        light: {
+            primary: '<?php echo $config['basemap_light'] ?? $config['basemap_fallback']; ?>',
+            fallback: '<?php echo $config['basemap_light_fallback'] ?? $config['basemap']; ?>',
+            attribution: '<?php echo addslashes($config['basemap_light_attribution'] ?? $config['basemap_fallback_attribution']); ?>',
+            fallbackAttribution: '<?php echo addslashes($config['basemap_light_fallback_attribution'] ?? $config['basemap_attribution']); ?>',
+        },
+    };
+    const basemapLayers = {};
+    function createBasemapLayer(mode) {
+        const config = basemapConfig[mode];
+        if (!config) return null;
+        const primary = L.tileLayer(config.primary, {
+            maxZoom: 18,
+            attribution: config.attribution,
+        });
+        const fallback = L.tileLayer(config.fallback, {
+            maxZoom: 18,
+            attribution: config.fallbackAttribution,
+        });
+        basemapLayers[mode] = {
+            primary,
+            fallback,
+            errors: 0,
+        };
+        primary.on('tileerror', () => {
+            const state = basemapLayers[mode];
+            state.errors += 1;
+            if (state.errors >= 5 && map.hasLayer(state.primary)) {
+                map.removeLayer(state.primary);
+                state.fallback.addTo(map);
+                tileStatus.style.display = 'block';
+                tileStatus.textContent = 'Basemap fallback activated.';
+            }
+        });
+        return basemapLayers[mode];
+    }
+    createBasemapLayer('dark');
+    createBasemapLayer('light');
+    let activeBasemap = null;
+    function switchBasemap(mode) {
+        const next = basemapLayers[mode] || createBasemapLayer(mode);
+        if (!next) {
+            return;
         }
-    });
-    primaryTiles.addTo(map);
+        if (activeBasemap) {
+            map.removeLayer(activeBasemap.primary);
+            map.removeLayer(activeBasemap.fallback);
+        }
+        next.errors = 0;
+        next.primary.addTo(map);
+        activeBasemap = next;
+        tileStatus.style.display = 'none';
+    }
+    switchBasemap('dark');
 
     // Container for GeoJSON overlay layers
     const overlays = {};
 
     // Colours per layer (defaults).  Operators can change via colour inputs.
     const layerColours = {};
+
+    // Navpoints layer
+    const navpointsLayer = L.layerGroup();
+    const navpointRenderer = L.canvas({ padding: 0.5 });
+    let navpointsRequest = null;
+    let navpointsLastWarning = 0;
 
     // Create layer controls in the sidebar
     const layerControlsDiv = document.getElementById('layerControls');
@@ -555,14 +740,16 @@ if (is_dir($geojsonDir)) {
             return;
         }
         const url = buildUrl(geojsonLayers[id]);
-        fetchJson(url, {}, `GeoJSON layer ${id} (${url})`)
+        fetchGeoJson(url, `GeoJSON layer ${id} (${url})`)
             .then(data => {
-                const layer = L.geoJSON(data, {
+                const normalized = normalizeGeojson(data);
+                const layer = L.geoJSON(normalized, {
                     style: feature => {
                         return {
                             color: layerColours[id],
                             weight: 1.5,
-                            fill: false
+                            fill: true,
+                            fillOpacity: 0.15
                         };
                     },
                     onEachFeature: (feature, layerEl) => {
@@ -584,9 +771,103 @@ if (is_dir($geojsonDir)) {
         }
     }
 
+    function navpointsZoneBounds() {
+        const bounds = map.getBounds();
+        let north = bounds.getNorth();
+        let south = bounds.getSouth();
+        let east = bounds.getEast();
+        let west = bounds.getWest();
+        if (settings.navpoints.zone === 'nw') {
+            north = Math.min(north, 33.5);
+            south = Math.max(south, 22.0);
+            east = Math.min(east, -100.0);
+            west = Math.max(west, -118.0);
+        } else if (settings.navpoints.zone === 'mmtj-120') {
+            const deltaLat = 120 / 60;
+            const deltaLon = deltaLat / Math.cos(settings.airport.lat * Math.PI / 180);
+            north = Math.min(north, settings.airport.lat + deltaLat);
+            south = Math.max(south, settings.airport.lat - deltaLat);
+            east = Math.min(east, settings.airport.lon + deltaLon);
+            west = Math.max(west, settings.airport.lon - deltaLon);
+        }
+        return { north, south, east, west };
+    }
+
+    function updateNavpoints() {
+        if (!settings.navpoints.enabled) {
+            navpointsLayer.clearLayers();
+            map.removeLayer(navpointsLayer);
+            return;
+        }
+        if (map.getZoom() < settings.navpoints.min_zoom) {
+            navpointsLayer.clearLayers();
+            map.removeLayer(navpointsLayer);
+            return;
+        }
+        if (!map.hasLayer(navpointsLayer)) {
+            navpointsLayer.addTo(map);
+        }
+        const bbox = navpointsZoneBounds();
+        const limit = settings.navpoints.max_points || 2000;
+        const url = apiUrl('navpoints.php')
+            + `?north=${encodeURIComponent(bbox.north)}`
+            + `&south=${encodeURIComponent(bbox.south)}`
+            + `&east=${encodeURIComponent(bbox.east)}`
+            + `&west=${encodeURIComponent(bbox.west)}`
+            + `&limit=${encodeURIComponent(limit)}`;
+        if (navpointsRequest) {
+            navpointsRequest.abort();
+        }
+        navpointsRequest = new AbortController();
+        fetchJson(url, { signal: navpointsRequest.signal }, 'Navpoints request')
+            .then(data => {
+                navpointsLayer.clearLayers();
+                const normalized = normalizeGeojson(data);
+                L.geoJSON(normalized, {
+                    pointToLayer: (feature, latlng) => {
+                        return L.circleMarker(latlng, {
+                            radius: 2.5,
+                            color: '#ffd166',
+                            fillColor: '#ffd166',
+                            fillOpacity: 0.9,
+                            weight: 0,
+                            renderer: navpointRenderer,
+                        });
+                    },
+                    onEachFeature: (feature, layerEl) => {
+                        const name = feature.properties && (feature.properties.id || feature.properties.name);
+                        if (name && settings.labels.show_labels && map.getZoom() >= settings.labels.min_zoom) {
+                            layerEl.bindTooltip(String(name), {
+                                permanent: false,
+                                direction: 'top',
+                                offset: [0, -6],
+                            });
+                        }
+                    },
+                }).addTo(navpointsLayer);
+                if (data.meta && data.meta.truncated && Date.now() - navpointsLastWarning > 5000) {
+                    navpointsLastWarning = Date.now();
+                    showNotification('Navpoints limit reached; zoom in for more detail.');
+                }
+            })
+            .catch(() => {});
+    }
+
+    let navpointsTimer = null;
+    function scheduleNavpointsUpdate() {
+        if (navpointsTimer) {
+            clearTimeout(navpointsTimer);
+        }
+        navpointsTimer = setTimeout(() => {
+            updateNavpoints();
+        }, 250);
+    }
+
     // Flight data and interactions
     const flights = {}; // keyed by hex
     const flightMarkers = {};
+    const flightStates = {};
+    let selectedFlight = null;
     const stripTray = document.getElementById('stripTray');
     const flightInfoDiv = document.getElementById('flightInfo');
     const notif = document.getElementById('notif');
@@ -614,8 +895,19 @@ if (is_dir($geojsonDir)) {
             show_vs: true,
             show_trk: true,
             show_sqk: true,
+            show_labels: true,
+            min_zoom: 7,
             font_size: 12,
             color: '#00ff00',
+        },
+        display: {
+            basemap: 'dark',
+        },
+        navpoints: {
+            enabled: true,
+            min_zoom: 7,
+            zone: 'all',
+            max_points: 2000,
         },
         category_styles: {
             default: {
@@ -638,6 +930,9 @@ if (is_dir($geojsonDir)) {
         document.documentElement.style.setProperty('--label-color', settings.labels.color);
         map.setView([settings.airport.lat, settings.airport.lon], map.getZoom());
         updateRangeRings();
+        switchBasemap(settings.display && settings.display.basemap ? settings.display.basemap : 'dark');
+        updateLabelVisibility();
+        updateNavpoints();
     }
 
     // Create or refresh range rings around the primary airport
@@ -659,6 +954,14 @@ if (is_dir($geojsonDir)) {
         });
     }
 
+    map.on('zoomend', () => {
+        updateLabelVisibility();
+        scheduleNavpointsUpdate();
+    });
+    map.on('moveend', () => {
+        scheduleNavpointsUpdate();
+    });
+
     // Utility: compute destination point given distance (NM) and bearing from start
     function destinationPoint(lat, lon, bearing, distanceNm) {
         const R = 6371e3; // metres
@@ -671,7 +974,95 @@ if (is_dir($geojsonDir)) {
         return [φ2 * 180 / Math.PI, ((λ2 * 180 / Math.PI + 540) % 360) - 180];
     }
 
+    const mexicoBounds = {
+        latMin: 10,
+        latMax: 40,
+        lonMin: -120,
+        lonMax: -80,
+    };
+
+    function isMexicoCoord(lat, lon) {
+        return lat >= mexicoBounds.latMin && lat <= mexicoBounds.latMax && lon >= mexicoBounds.lonMin && lon <= mexicoBounds.lonMax;
+    }
+
+    function normalizeLonLat(coord) {
+        if (!Array.isArray(coord) || coord.length < 2) {
+            return coord;
+        }
+        const lon = parseFloat(coord[0]);
+        const lat = parseFloat(coord[1]);
+        if (Number.isNaN(lon) || Number.isNaN(lat)) {
+            return coord;
+        }
+        if (isMexicoCoord(lat, lon)) {
+            return [lon, lat];
+        }
+        if (isMexicoCoord(lon, lat)) {
+            return [lat, lon];
+        }
+        return [lon, lat];
+    }
+
+    function normalizeCoordsDeep(coords) {
+        if (!Array.isArray(coords)) {
+            return coords;
+        }
+        if (coords.length && typeof coords[0] === 'number') {
+            return normalizeLonLat(coords);
+        }
+        return coords.map(item => normalizeCoordsDeep(item));
+    }
+
+    function normalizeGeojson(data) {
+        if (!data || !data.type) {
+            return data;
+        }
+        if (data.type === 'FeatureCollection') {
+            data.features = (data.features || []).map(feature => {
+                if (feature.geometry && feature.geometry.coordinates) {
+                    feature.geometry.coordinates = normalizeCoordsDeep(feature.geometry.coordinates);
+                }
+                return feature;
+            });
+            return data;
+        }
+        if (data.type === 'Feature') {
+            if (data.geometry && data.geometry.coordinates) {
+                data.geometry.coordinates = normalizeCoordsDeep(data.geometry.coordinates);
+            }
+            return data;
+        }
+        if (data.coordinates) {
+            data.coordinates = normalizeCoordsDeep(data.coordinates);
+        }
+        return data;
+    }
+
     // Add or update a flight marker on the map
+    function getFlightStatus(hex) {
+        return flightStates[hex] || 'normal';
+    }
+
+    function flightColor(status) {
+        if (status === 'assumed') {
+            return '#00c1ff';
+        }
+        if (status === 'released') {
+            return '#8f9bb3';
+        }
+        return '#50fa7b';
+    }
+
+    function shouldShowLabel(ac) {
+        if (!settings.labels.show_labels) {
+            return false;
+        }
+        if (selectedFlight && selectedFlight === ac.hex) {
+            return true;
+        }
+        return map.getZoom() >= (settings.labels.min_zoom || 7);
+    }
+
     function renderFlight(ac) {
         const id = ac.hex;
         const existing = flightMarkers[id];
@@ -679,28 +1070,35 @@ if (is_dir($geojsonDir)) {
         const vectorLengthNm = 2; // minutes ahead – 2 minutes for short leader
         const predictedDistance = (ac.gs || 0) * (vectorLengthNm / 60);
         const predicted = destinationPoint(ac.lat, ac.lon, ac.track, predictedDistance);
+        const status = getFlightStatus(id);
+        const color = flightColor(status);
         if (existing) {
             existing.marker.setLatLng(pos);
             existing.vector.setLatLngs([pos, predicted]);
             existing.marker.setTooltipContent(labelFromAc(ac));
+            existing.marker.setStyle({ color, fillColor: color, opacity: status === 'released' ? 0.6 : 1 });
+            existing.vector.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
+            existing.marker.setTooltipContent(labelFromAc(ac));
+            existing.marker.setTooltipOpacity(shouldShowLabel(ac) ? 1 : 0);
         } else {
             const marker = L.circleMarker(pos, {
                 radius: 4,
-                color: 'lime',
-                fillColor: 'lime',
+                color,
+                fillColor: color,
                 fillOpacity: 1,
             }).addTo(map);
             const vector = L.polyline([pos, predicted], {
-                color: 'lime',
+                color,
                 weight: 1.0,
-                opacity: 0.7,
+                opacity: status === 'released' ? 0.3 : 0.7,
                 dashArray: '4 4'
             }).addTo(map);
             marker.bindTooltip(labelFromAc(ac), {
                 offset: [10, 0],
                 direction: 'right',
-                permanent: false
+                permanent: true
             });
+            marker.setTooltipOpacity(shouldShowLabel(ac) ? 1 : 0);
             marker.on('click', () => selectFlight(id));
             flightMarkers[id] = { marker, vector };
         }
@@ -731,11 +1129,25 @@ if (is_dir($geojsonDir)) {
         if (settings.labels.show_sqk && ac.squawk) {
             parts.push(ac.squawk);
         }
+        if (getFlightStatus(ac.hex) === 'assumed') {
+            if (ac.type) {
+                parts.push(ac.type);
+            }
+        }
         // Append free text note if any
         if (ac.note) {
             parts.push(ac.note.toUpperCase());
         }
         return parts.join(' \u00a0 ');
+    }
+
+    function updateLabelVisibility() {
+        Object.keys(flightMarkers).forEach(id => {
+            const ac = flights[id];
+            if (!ac) return;
+            const visible = shouldShowLabel(ac);
+            flightMarkers[id].marker.setTooltipOpacity(visible ? 1 : 0);
+        });
     }
 
     // Remove stale flights (not updated in last poll)
@@ -746,6 +1158,10 @@ if (is_dir($geojsonDir)) {
                 map.removeLayer(flightMarkers[id].vector);
                 delete flightMarkers[id];
                 delete flights[id];
+                if (selectedFlight === id) {
+                    selectedFlight = null;
+                    flightInfoDiv.textContent = 'Click a flight to see details.';
+                }
                 // Remove from strip tray if not assumed
                 const stripEl = document.querySelector('.strip[data-hex="' + id + '"]');
                 if (stripEl && !stripEl.classList.contains('assumed')) {
@@ -756,11 +1172,52 @@ if (is_dir($geojsonDir)) {
     }
 
     // Update flight strips in tray
+    function buildStripHtml(ac, status) {
+        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : ac.hex;
+        const alt = ac.alt ? `${ac.alt}FT` : '---';
+        const gs = ac.gs ? `${ac.gs}KT` : '---';
+        const trk = ac.track ? `${ac.track}°` : '---';
+        const vs = ac.baro_rate || ac.geom_rate;
+        const vsText = vs ? `${Math.abs(vs)}${vs > 0 ? '↑' : '↓'}` : '---';
+        const sq = ac.squawk || '----';
+        const type = ac.type || ac.aircraft_type || '';
+        const origin = ac.origin || ac.orig || '';
+        const dest = ac.destination || ac.dest || '';
+        const eta = ac.eta || '';
+        const note = ac.note || '';
+        const statusLabel = status === 'assumed' ? 'ASUMIDA' : status === 'released' ? 'RELEASE' : 'NORMAL';
+        const detailsPrimary = `
+            <span>${alt}</span>
+            <span>${gs}</span>
+            <span>${trk}</span>
+            <span>SQ ${sq}</span>
+            <span>VS ${vsText}</span>
+        `;
+        let detailsSecondary = '';
+        if (status === 'assumed') {
+            detailsSecondary = `
+                <span>${type ? `TYPE ${type}` : 'TYPE ---'}</span>
+                <span>${origin || dest ? `${origin || '---'} → ${dest || '---'}` : 'RUTA ---'}</span>
+                <span>${eta ? `ETA ${eta}` : 'ETA ---'}</span>
+                <span>${note ? `NOTE ${note}` : ''}</span>
+            `;
+        }
+        return `
+            <div class="strip-header">
+                <span>${callsign}</span>
+                <span class="strip-status">${statusLabel}</span>
+            </div>
+            <div class="strip-meta">${detailsPrimary}</div>
+            ${detailsSecondary ? `<div class="strip-meta">${detailsSecondary}</div>` : ''}
+        `;
+    }
+
     function updateStrips() {
         // Remove strips that no longer exist (non‑assumed)
         document.querySelectorAll('#stripTray .strip').forEach(strip => {
             const id = strip.dataset.hex;
-            if (!flights[id] && !strip.classList.contains('assumed')) {
+            const status = getFlightStatus(id);
+            if (!flights[id] && status !== 'assumed') {
                 strip.remove();
             }
         });
@@ -776,15 +1233,14 @@ if (is_dir($geojsonDir)) {
                 });
                 stripTray.appendChild(strip);
             }
-            // Label for strip
-            strip.textContent = ac.flight ? ac.flight.trim() : ac.hex;
-            // Highlight emergency squawk
+            const status = getFlightStatus(ac.hex);
+            strip.classList.toggle('assumed', status === 'assumed');
+            strip.classList.toggle('released', status === 'released');
+            strip.innerHTML = buildStripHtml(ac, status);
             if (['7500','7600','7700'].includes(ac.squawk)) {
                 strip.style.background = '#8a0e0e';
-            } else if (strip.classList.contains('assumed')) {
-                strip.style.background = '#28446d';
             } else {
-                strip.style.background = '#243752';
+                strip.style.background = '';
             }
         });
     }
@@ -793,15 +1249,20 @@ if (is_dir($geojsonDir)) {
     function selectFlight(hex) {
         const ac = flights[hex];
         if (!ac) return;
+        selectedFlight = hex;
         // Highlight marker
         Object.keys(flightMarkers).forEach(id => {
             const m = flightMarkers[id].marker;
-            m.setStyle({ color: id === hex ? 'cyan' : 'lime', fillColor: id === hex ? 'cyan' : 'lime' });
+            const status = getFlightStatus(id);
+            const color = id === hex ? '#22d3ee' : flightColor(status);
+            m.setStyle({ color, fillColor: color });
         });
         // Show details
         // Build details HTML
+        const status = getFlightStatus(hex);
         let html = '';
         html += '<strong>CALLSIGN:</strong> ' + (ac.flight ? ac.flight.trim().toUpperCase() : ac.hex) + '<br>';
+        html += '<strong>STATUS:</strong> ' + status.toUpperCase() + '<br>';
         html += '<strong>POS:</strong> ' + ac.lat.toFixed(4) + ', ' + ac.lon.toFixed(4) + '<br>';
         if (ac.alt) html += '<strong>ALT:</strong> ' + ac.alt + ' FT<br>';
         if (ac.gs) html += '<strong>GS:</strong> ' + ac.gs + ' KT<br>';
@@ -812,7 +1273,13 @@ if (is_dir($geojsonDir)) {
         }
         if (ac.track) html += '<strong>TRK:</strong> ' + ac.track + '°<br>';
         if (ac.squawk) html += '<strong>SQ:</strong> ' + ac.squawk + '<br>';
+        if (ac.type) html += '<strong>TYPE:</strong> ' + ac.type + '<br>';
+        if (ac.origin || ac.orig || ac.destination || ac.dest) {
+            html += '<strong>ROUTE:</strong> ' + (ac.origin || ac.orig || '---') + ' → ' + (ac.destination || ac.dest || '---') + '<br>';
+        }
+        if (ac.eta) html += '<strong>ETA:</strong> ' + ac.eta + '<br>';
         if (ac.emergency && ac.emergency !== 'none') html += '<strong>EMERG:</strong> ' + ac.emergency + '<br>';
+        if (ac.routeSummary) html += '<strong>ROUTE SUMMARY:</strong> ' + ac.routeSummary + '<br>';
         html += '<label>Note / OPMET:<br><textarea id="noteField" rows="2" style="width:95%;">' + (ac.note || '') + '</textarea></label><br>';
         html += '<button id="assumeBtn">Assume</button> ' +
                 '<button id="releaseBtn">Release</button> ' +
@@ -838,23 +1305,48 @@ if (is_dir($geojsonDir)) {
                 existing.marker.setTooltipContent(labelFromAc(flights[hex]));
             }
         });
+        updateLabelVisibility();
     }
 
     // Assume a flight (mark as assumed)
     function assumeFlight(hex) {
+        flightStates[hex] = 'assumed';
+        const markerData = flightMarkers[hex];
+        if (markerData) {
+            const color = flightColor('assumed');
+            markerData.marker.setStyle({ color, fillColor: color });
+            markerData.vector.setStyle({ color });
+        }
         const strip = document.querySelector('.strip[data-hex="' + hex + '"]');
         if (strip) {
             strip.classList.add('assumed');
             strip.classList.remove('released');
         }
+        updateStrips();
+        updateLabelVisibility();
+        if (selectedFlight === hex) {
+            selectFlight(hex);
+        }
     }
 
     // Release a flight (mark as released)
     function releaseFlight(hex) {
+        flightStates[hex] = 'released';
+        const markerData = flightMarkers[hex];
+        if (markerData) {
+            const color = flightColor('released');
+            markerData.marker.setStyle({ color, fillColor: color, opacity: 0.6 });
+            markerData.vector.setStyle({ color, opacity: 0.3 });
+        }
         const strip = document.querySelector('.strip[data-hex="' + hex + '"]');
         if (strip) {
             strip.classList.remove('assumed');
             strip.classList.add('released');
+        }
+        updateStrips();
+        updateLabelVisibility();
+        if (selectedFlight === hex) {
+            selectFlight(hex);
         }
     }
 
@@ -873,20 +1365,37 @@ if (is_dir($geojsonDir)) {
         }
         const ac = flights[hex];
         if (!ac) return;
-        // Example: load a GeoJSON representing the flight plan by callsign.
-        // The file should be located under data/routes/{callsign}.geojson.
-        const callsign = ac.flight.trim();
-        const url = buildUrl('data/routes/' + callsign + '.geojson');
-        fetch(url)
-            .then(resp => resp.json())
-            .then(gjson => {
-                routeLayer = L.geoJSON(gjson, {
-                    style: { color: 'yellow', weight: 2.0 }
+        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : '';
+        if (!callsign) {
+            showNotification('Route unavailable: missing callsign.');
+            return;
+        }
+        const url = apiUrl('route.php') + `?callsign=${encodeURIComponent(callsign)}`;
+        fetchJson(url, {}, `Route (${callsign})`)
+            .then(data => {
+                if (!data.ok || !data.route) {
+                    showNotification('Route unavailable for ' + callsign);
+                    return;
+                }
+                const normalized = normalizeGeojson(data.route);
+                routeLayer = L.geoJSON(normalized, {
+                    style: { color: '#ffd166', weight: 2.0 }
                 }).addTo(map);
-                map.fitBounds(routeLayer.getBounds(), { maxZoom: 8 });
+                if (routeLayer.getBounds().isValid()) {
+                    map.fitBounds(routeLayer.getBounds(), { maxZoom: 8 });
+                }
+                if (data.summary) {
+                    const fixCount = data.summary.fix_count || 0;
+                    ac.routeSummary = fixCount ? `Fixes: ${fixCount}` : 'Route loaded';
+                } else {
+                    ac.routeSummary = 'Route loaded';
+                }
+                if (selectedFlight === hex) {
+                    selectFlight(hex);
+                }
             })
             .catch(() => {
-                showNotification('Route not available for ' + callsign);
+                showNotification('Route unavailable for ' + callsign);
             });
     }
 
@@ -907,6 +1416,110 @@ if (is_dir($geojsonDir)) {
             feedError.style.display = 'none';
         }
     }
+
+    let brlActive = false;
+    let brlOrigin = null;
+    let brlLine = null;
+    let brlLabel = null;
+    const brlToggle = document.getElementById('brlToggle');
+    const brlClear = document.getElementById('brlClear');
+
+    function computeBearingRange(lat1, lon1, lat2, lon2) {
+        const R = 6371e3;
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2)
+            + Math.cos(φ1) * Math.cos(φ2)
+            * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distanceNm = (R * c) / 1852;
+        const y = Math.sin(Δλ) * Math.cos(φ2);
+        const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+        const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        return { bearing, distanceNm };
+    }
+
+    function updateBrlLine(endLatLng) {
+        if (!brlOrigin || !endLatLng) {
+            return;
+        }
+        const originLatLng = L.latLng(brlOrigin);
+        const lineLatLngs = [originLatLng, endLatLng];
+        if (!brlLine) {
+            brlLine = L.polyline(lineLatLngs, {
+                color: '#ff6b6b',
+                weight: 2,
+                dashArray: '4 4',
+            }).addTo(map);
+        } else {
+            brlLine.setLatLngs(lineLatLngs);
+        }
+        const mid = L.latLng(
+            (originLatLng.lat + endLatLng.lat) / 2,
+            (originLatLng.lng + endLatLng.lng) / 2
+        );
+        const { bearing, distanceNm } = computeBearingRange(originLatLng.lat, originLatLng.lng, endLatLng.lat, endLatLng.lng);
+        const labelText = `BRG ${bearing.toFixed(0)}°  RNG ${distanceNm.toFixed(1)} NM`;
+        if (!brlLabel) {
+            brlLabel = L.marker(mid, {
+                icon: L.divIcon({
+                    className: 'brl-label',
+                    html: `<div style="background:#0e1520;color:#ff6b6b;padding:2px 6px;border:1px solid #ff6b6b;border-radius:4px;font-size:11px;">${labelText}</div>`
+                }),
+            }).addTo(map);
+        } else {
+            brlLabel.setLatLng(mid);
+            brlLabel.setIcon(L.divIcon({
+                className: 'brl-label',
+                html: `<div style="background:#0e1520;color:#ff6b6b;padding:2px 6px;border:1px solid #ff6b6b;border-radius:4px;font-size:11px;">${labelText}</div>`
+            }));
+        }
+    }
+
+    function clearBrl() {
+        if (brlLine) {
+            map.removeLayer(brlLine);
+            brlLine = null;
+        }
+        if (brlLabel) {
+            map.removeLayer(brlLabel);
+            brlLabel = null;
+        }
+        brlOrigin = null;
+    }
+
+    brlToggle.addEventListener('click', () => {
+        brlActive = !brlActive;
+        brlToggle.style.background = brlActive ? '#ff6b6b' : '';
+        brlToggle.style.color = brlActive ? '#0b0f18' : '';
+        if (brlActive) {
+            brlOrigin = [settings.airport.lat, settings.airport.lon];
+            showNotification('BRL active: click to set destination (origin MMTJ). Shift+click to set origin.');
+        } else {
+            showNotification('BRL deactivated');
+        }
+    });
+    brlClear.addEventListener('click', () => {
+        clearBrl();
+        showNotification('BRL cleared');
+    });
+
+    map.on('click', (event) => {
+        if (!brlActive) {
+            return;
+        }
+        if (event.originalEvent && event.originalEvent.shiftKey) {
+            brlOrigin = [event.latlng.lat, event.latlng.lng];
+            showNotification('BRL origin set. Click destination.');
+            return;
+        }
+        if (!brlOrigin) {
+            brlOrigin = [settings.airport.lat, settings.airport.lon];
+        }
+        updateBrlLine(event.latlng);
+    });
 
     // Poll feed.php for live data
     function pollFeed() {
@@ -930,6 +1543,7 @@ if (is_dir($geojsonDir)) {
                 });
                 pruneFlights(seen);
                 updateStrips();
+                updateLabelVisibility();
             })
             .catch(err => {
                 console.error('Error fetching feed:', err);
@@ -954,6 +1568,21 @@ if (is_dir($geojsonDir)) {
     const airacUpdateBtn = document.getElementById('airacUpdateBtn');
     const airacSpinner = document.getElementById('airacSpinner');
     const airacConsole = document.getElementById('airacConsole');
+    const sidebarToggle = document.getElementById('sidebarToggle');
+
+    function setSidebarCollapsed(collapsed) {
+        document.body.classList.toggle('sidebar-collapsed', collapsed);
+        sidebarToggle.textContent = collapsed ? '☰ Show Panel' : '☰ Hide Panel';
+        localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+    }
+
+    const storedSidebar = localStorage.getItem('sidebarCollapsed');
+    setSidebarCollapsed(storedSidebar === '1');
+    sidebarToggle.addEventListener('click', () => {
+        const collapsed = document.body.classList.contains('sidebar-collapsed');
+        setSidebarCollapsed(!collapsed);
+        map.invalidateSize();
+    });
     settingsToggle.addEventListener('click', () => {
         settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
         settingsToggle.textContent = settingsPanel.style.display === 'none' ? 'Open Settings' : 'Close Settings';
@@ -969,11 +1598,18 @@ if (is_dir($geojsonDir)) {
         document.getElementById('ringDash').value = settings.rings.style.dash;
         document.getElementById('labelFontSize').value = settings.labels.font_size;
         document.getElementById('labelColour').value = settings.labels.color;
+        document.getElementById('showLabels').checked = settings.labels.show_labels;
+        document.getElementById('labelMinZoom').value = settings.labels.min_zoom;
+        document.getElementById('basemapSelect').value = settings.display.basemap || 'dark';
         document.getElementById('showAltitude').checked = settings.labels.show_alt;
         document.getElementById('showSpeed').checked = settings.labels.show_gs;
         document.getElementById('showVerticalSpeed').checked = settings.labels.show_vs;
         document.getElementById('showTrack').checked = settings.labels.show_trk;
         document.getElementById('showSquawk').checked = settings.labels.show_sqk;
+        document.getElementById('navpointsEnabled').checked = settings.navpoints.enabled;
+        document.getElementById('navpointsMinZoom').value = settings.navpoints.min_zoom;
+        document.getElementById('navpointsZone').value = settings.navpoints.zone;
+        document.getElementById('navpointsMax').value = settings.navpoints.max_points;
         airacUpdateBtn.style.display = airacUpdateEnabled ? 'inline-block' : 'none';
     });
     // Apply settings on button click
@@ -992,11 +1628,18 @@ if (is_dir($geojsonDir)) {
         settings.rings.style.dash = document.getElementById('ringDash').value;
         settings.labels.font_size = parseInt(document.getElementById('labelFontSize').value, 10) || settings.labels.font_size;
         settings.labels.color = document.getElementById('labelColour').value;
+        settings.labels.show_labels = document.getElementById('showLabels').checked;
+        settings.labels.min_zoom = parseInt(document.getElementById('labelMinZoom').value, 10) || settings.labels.min_zoom;
         settings.labels.show_alt = document.getElementById('showAltitude').checked;
         settings.labels.show_gs = document.getElementById('showSpeed').checked;
         settings.labels.show_vs = document.getElementById('showVerticalSpeed').checked;
         settings.labels.show_trk = document.getElementById('showTrack').checked;
         settings.labels.show_sqk = document.getElementById('showSquawk').checked;
+        settings.display.basemap = document.getElementById('basemapSelect').value;
+        settings.navpoints.enabled = document.getElementById('navpointsEnabled').checked;
+        settings.navpoints.min_zoom = parseInt(document.getElementById('navpointsMinZoom').value, 10) || settings.navpoints.min_zoom;
+        settings.navpoints.zone = document.getElementById('navpointsZone').value;
+        settings.navpoints.max_points = parseInt(document.getElementById('navpointsMax').value, 10) || settings.navpoints.max_points;
         saveSettings();
     });
 

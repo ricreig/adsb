@@ -15,10 +15,19 @@ return [
 
     // Base map tile URLs (no-labels). The primary is preferred; the fallback
     // is used automatically if the primary provider fails.
-    'basemap' => 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-    'basemap_fallback' => 'https://tiles.stadiamaps.com/tiles/alidade_smooth_nolabels/{z}/{x}/{y}{r}.png',
+    // Dark map is the default for radar-style contrast.
+    'basemap' => 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    'basemap_fallback' => 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
     'basemap_attribution' => '&copy; OpenStreetMap contributors, &copy; CARTO',
-    'basemap_fallback_attribution' => '&copy; OpenStreetMap contributors, &copy; Stadia Maps, &copy; OpenMapTiles',
+    'basemap_fallback_attribution' => '&copy; OpenStreetMap contributors, &copy; CARTO',
+    // Optional explicit light/dark providers for UI switching (fallback to basemap if omitted).
+    'basemap_dark' => 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    'basemap_dark_fallback' => 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+    'basemap_dark_attribution' => '&copy; OpenStreetMap contributors, &copy; CARTO',
+    'basemap_light' => 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+    'basemap_light_fallback' => 'https://tiles.stadiamaps.com/tiles/alidade_smooth_nolabels/{z}/{x}/{y}{r}.png',
+    'basemap_light_attribution' => '&copy; OpenStreetMap contributors, &copy; CARTO',
+    'basemap_light_fallback_attribution' => '&copy; OpenStreetMap contributors, &copy; Stadia Maps, &copy; OpenMapTiles',
 
     // Airplanes.live API endpoint.  This endpoint returns aircraft tracks
     // within a specified radius of a point.  Replace with your own provider
