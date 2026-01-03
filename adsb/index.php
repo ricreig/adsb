@@ -271,8 +271,9 @@ if (is_dir($geojsonDir)) {
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o1w/X8WdUNwH5tXbSb5Cqx630DGm9LdlVNV4cCZmZyQ=" crossorigin=""></script>
     <script>
+    window.ADSB_BASE_PATH = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
     window.ADSB_BASE = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
-    const BASE_URL = window.ADSB_BASE || '';
+    const BASE_URL = window.ADSB_BASE_PATH || '';
     function buildUrl(path) {
         const cleanPath = path.replace(/^\/+/, '');
         if (!BASE_URL) {

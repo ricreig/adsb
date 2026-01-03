@@ -16,6 +16,12 @@ Visita `http://127.0.0.1:8000/`.
 - Endpoint: `GET /api/settings.php` devuelve settings y defaults.
 - Endpoint: `POST /api/settings.php` guarda settings validados en SQLite (`data/adsb.sqlite`).
 
+## Diagnóstico rápido
+Abre `http://127.0.0.1:8000/api/health.php` (o tu ruta equivalente en producción) para verificar:
+- `base_path` detectado por PHP.
+- Disponibilidad de extensiones (`sqlite3`, `apcu`).
+- Hora del servidor (`now`).
+
 ## AIRAC / VATMEX
 Configura en `config.php`:
 ```php
@@ -35,8 +41,10 @@ Esto ejecuta (en servidor):
 
 ## Validación GeoJSON
 ```bash
+php update_airspace.php /ruta/al/vatmex-mmfr-sector
 php scripts/validate_geojson.php
 ```
+En el servidor no hay Python, así que siempre se usa `scripts/validate_geojson.php`.
 
 ## Fuentes de datos geográficos
 - `data/mex-border.geojson`: contorno simplificado de México basado en Natural Earth (1:50m Admin 0 Countries, dominio público).
