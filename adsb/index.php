@@ -65,15 +65,15 @@ if (is_dir($geojsonDir)) {
         #map {
             position: absolute;
             top: 0;
-            bottom: 0;
             left: 0;
-            right: 300px;
+            right: 320px;
+            height: 100vh;
         }
         #sidebar {
             position: absolute;
             top: 0;
             right: 0;
-            width: 300px;
+            width: 320px;
             bottom: 0;
             background: #1a2330;
             overflow-y: auto;
@@ -135,10 +135,51 @@ if (is_dir($geojsonDir)) {
             border-radius: 4px;
             display: none;
         }
+        #tileStatus {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: #f39c12;
+            color: #1a1a1a;
+            padding: 6px 10px;
+            border-radius: 4px;
+            display: none;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        .settings-section {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid #3f5270;
+        }
+        .console-box {
+            background: #0e1520;
+            color: #cdd6f4;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #3f5270;
+            max-height: 160px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #cdd6f4;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 6px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    <div id="tileStatus">Basemap fallback activated.</div>
     <div id="sidebar">
         <h2>Airspace Layers</h2>
         <div id="layerControls"></div>
@@ -160,18 +201,20 @@ if (is_dir($geojsonDir)) {
             <label style="display:block;margin-bottom:4px;">Primary Airport Lon
                 <input type="number" id="airportLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['airport']['lon']); ?>" style="width:90px;margin-left:4px;"/>
             </label>
+            <label style="display:block;margin-bottom:4px;">Radius (NM, max 250)
+                <input type="number" id="radiusInput" min="1" max="250" value="250" style="width:80px;margin-left:4px;"/>
+            </label>
             <label style="display:block;margin-bottom:4px;">Range Rings (NM, comma‑sep)
                 <input type="text" id="ringDistances" value="50,100,150,200,250" style="width:120px;margin-left:4px;"/>
             </label>
             <label style="display:block;margin-bottom:4px;">Ring Colour
                 <input type="color" id="ringColour" value="#6666ff" style="margin-left:4px;"/>
             </label>
-            <label style="display:block;margin-bottom:4px;">Ring Style
-                <select id="ringStyle" style="margin-left:4px;">
-                    <option value="solid">Solid</option>
-                    <option value="dashed">Dashed</option>
-                    <option value="dotted">Dotted</option>
-                </select>
+            <label style="display:block;margin-bottom:4px;">Ring Weight
+                <input type="number" id="ringWeight" min="0.5" max="10" step="0.5" value="1" style="width:60px;margin-left:4px;"/>
+            </label>
+            <label style="display:block;margin-bottom:4px;">Ring Dash (CSS dash)
+                <input type="text" id="ringDash" value="6 6" style="width:90px;margin-left:4px;"/>
             </label>
             <label style="display:block;margin-bottom:4px;">Label Font Size
                 <input type="number" id="labelFontSize" min="8" max="24" value="12" style="width:50px;margin-left:4px;"/>
@@ -199,7 +242,21 @@ if (is_dir($geojsonDir)) {
                 <input type="checkbox" id="showSquawk" checked/>
                 Show Squawk
             </label>
-            <button id="applySettings" style="width:100%;margin-top:6px;">Apply Settings</button>
+            <div class="settings-section">
+                <strong>Category Styles (future)</strong>
+                <div style="font-size:12px;color:#9fb3c8;margin-top:4px;">
+                    Placeholder for per-layer styling defaults (loaded/saved with settings).
+                </div>
+            </div>
+            <div class="settings-section">
+                <strong>AIRAC / VATMEX</strong>
+                <div style="margin-top:6px;">
+                    <button id="airacUpdateBtn" style="width:100%;display:none;">UPDATE AIRAC (PULL VATMEX + REBUILD GEOJSON)</button>
+                    <span id="airacSpinner" class="spinner" style="display:none;"></span>
+                </div>
+                <div id="airacConsole" class="console-box" style="margin-top:6px;display:none;"></div>
+            </div>
+            <button id="applySettings" style="width:100%;margin-top:10px;">Apply Settings</button>
         </div>
     </div>
     <div id="notif"></div>
@@ -212,13 +269,27 @@ if (is_dir($geojsonDir)) {
     // Create the map
     const map = L.map('map', {
         zoomControl: true,
-        attributionControl: false,
+        attributionControl: true,
     }).setView([<?php echo $config['airport']['lat']; ?>, <?php echo $config['airport']['lon']; ?>], 8);
-    // Add base map tile layer
-    L.tileLayer('<?php echo $config['basemap']; ?>', {
+    const tileStatus = document.getElementById('tileStatus');
+    const primaryTiles = L.tileLayer('<?php echo $config['basemap']; ?>', {
         maxZoom: 18,
-        attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
+        attribution: '<?php echo addslashes($config['basemap_attribution']); ?>',
+    });
+    const fallbackTiles = L.tileLayer('<?php echo $config['basemap_fallback']; ?>', {
+        maxZoom: 18,
+        attribution: '<?php echo addslashes($config['basemap_fallback_attribution']); ?>',
+    });
+    let tileErrors = 0;
+    primaryTiles.on('tileerror', () => {
+        tileErrors += 1;
+        if (tileErrors >= 5 && !map.hasLayer(fallbackTiles)) {
+            map.removeLayer(primaryTiles);
+            fallbackTiles.addTo(map);
+            tileStatus.style.display = 'block';
+        }
+    });
+    primaryTiles.addTo(map);
 
     // Container for GeoJSON overlay layers
     const overlays = {};
@@ -313,52 +384,51 @@ if (is_dir($geojsonDir)) {
     const flightInfoDiv = document.getElementById('flightInfo');
     const notif = document.getElementById('notif');
 
-    // Global settings object with defaults.  These values can be overridden
-    // by user interaction through the Settings panel and persisted in
-    // localStorage.  Distances are in nautical miles.
-    let settings = {
-        airportIcao: '<?php echo addslashes($config['airport']['icao']); ?>',
-        airportLat: <?php echo (float)$config['airport']['lat']; ?>,
-        airportLon: <?php echo (float)$config['airport']['lon']; ?>,
-        ringDistances: [50, 100, 150, 200, 250],
-        ringColour: '#6666ff',
-        ringStyle: 'solid',
-        labelSize: 12,
-        labelColour: '#00ff00',
-        showAltitude: true,
-        showSpeed: true,
-        showVerticalSpeed: true,
-        showTrack: true,
-        showSquawk: true,
+    const defaultSettings = {
+        airport: {
+            icao: '<?php echo addslashes($config['airport']['icao']); ?>',
+            lat: <?php echo (float)$config['airport']['lat']; ?>,
+            lon: <?php echo (float)$config['airport']['lon']; ?>,
+        },
+        radius_nm: 250,
+        rings: {
+            distances: [50, 100, 150, 200, 250],
+            style: {
+                color: '#6666ff',
+                weight: 1,
+                dash: '6 6',
+            },
+        },
+        labels: {
+            show_alt: true,
+            show_gs: true,
+            show_vs: true,
+            show_trk: true,
+            show_sqk: true,
+            font_size: 12,
+            color: '#00ff00',
+        },
+        category_styles: {
+            default: {
+                color: '#3aa0ff',
+                weight: 1.5,
+                dash: '',
+            },
+        },
     };
 
-    // Load settings from localStorage if present
-    (function loadStoredSettings() {
-        try {
-            const stored = localStorage.getItem('atcSettings');
-            if (stored) {
-                const obj = JSON.parse(stored);
-                Object.assign(settings, obj);
-            }
-        } catch (e) {}
-    })();
+    let settings = JSON.parse(JSON.stringify(defaultSettings));
+    let airacUpdateEnabled = false;
 
     // Range ring overlay container
     let rangeRings = [];
 
     // Apply settings to map and UI
     function applySettings() {
-        // Update CSS variables for label
-        document.documentElement.style.setProperty('--label-size', settings.labelSize);
-        document.documentElement.style.setProperty('--label-color', settings.labelColour);
-        // Update map view
-        map.setView([settings.airportLat, settings.airportLon], map.getZoom());
-        // Update rings
+        document.documentElement.style.setProperty('--label-size', settings.labels.font_size);
+        document.documentElement.style.setProperty('--label-color', settings.labels.color);
+        map.setView([settings.airport.lat, settings.airport.lon], map.getZoom());
         updateRangeRings();
-        // Persist to localStorage
-        try {
-            localStorage.setItem('atcSettings', JSON.stringify(settings));
-        } catch (e) {}
     }
 
     // Create or refresh range rings around the primary airport
@@ -366,16 +436,11 @@ if (is_dir($geojsonDir)) {
         // Remove existing rings
         rangeRings.forEach(r => map.removeLayer(r));
         rangeRings = [];
-        const styleMap = {
-            solid: '',
-            dashed: '6 6',
-            dotted: '1 8',
-        };
-        const dashArray = styleMap[settings.ringStyle] || '';
-        settings.ringDistances.forEach(dist => {
-            const circle = L.circle([settings.airportLat, settings.airportLon], {
-                color: settings.ringColour,
-                weight: 1,
+        const dashArray = settings.rings.style.dash || '';
+        settings.rings.distances.forEach(dist => {
+            const circle = L.circle([settings.airport.lat, settings.airport.lon], {
+                color: settings.rings.style.color,
+                weight: settings.rings.style.weight,
                 fill: false,
                 radius: dist * 1852, // convert NM to metres
                 dashArray: dashArray,
@@ -438,23 +503,23 @@ if (is_dir($geojsonDir)) {
         // Always callsign/hex in uppercase
         const callsign = ac.flight ? ac.flight.trim().toUpperCase() : ac.hex;
         parts.push(callsign);
-        if (settings.showAltitude && ac.alt !== null && ac.alt !== undefined) {
+        if (settings.labels.show_alt && ac.alt !== null && ac.alt !== undefined) {
             parts.push(ac.alt + 'FT');
         }
-        if (settings.showSpeed && ac.gs !== null && ac.gs !== undefined) {
+        if (settings.labels.show_gs && ac.gs !== null && ac.gs !== undefined) {
             parts.push(ac.gs + 'KT');
         }
-        if (settings.showVerticalSpeed) {
+        if (settings.labels.show_vs) {
             const vs = ac.baro_rate || ac.geom_rate || 0;
             if (vs) {
                 const arrow = vs > 0 ? '↑' : '↓';
                 parts.push(Math.abs(vs) + ' ' + arrow);
             }
         }
-        if (settings.showTrack && ac.track !== null && ac.track !== undefined) {
+        if (settings.labels.show_trk && ac.track !== null && ac.track !== undefined) {
             parts.push(ac.track + '°');
         }
-        if (settings.showSquawk && ac.squawk) {
+        if (settings.labels.show_sqk && ac.squawk) {
             parts.push(ac.squawk);
         }
         // Append free text note if any
@@ -627,9 +692,8 @@ if (is_dir($geojsonDir)) {
 
     // Poll feed.php for live data
     function pollFeed() {
-        // Determine radius: use the largest range ring if available, else default 250 NM
-        const radius = settings.ringDistances.length ? Math.max.apply(null, settings.ringDistances) : 250;
-        const url = 'feed.php?lat=' + encodeURIComponent(settings.airportLat) + '&lon=' + encodeURIComponent(settings.airportLon) + '&radius=' + encodeURIComponent(radius);
+        const radius = Math.min(250, settings.radius_nm || 250);
+        const url = 'feed.php?lat=' + encodeURIComponent(settings.airport.lat) + '&lon=' + encodeURIComponent(settings.airport.lon) + '&radius=' + encodeURIComponent(radius);
         fetch(url)
             .then(resp => resp.json())
             .then(data => {
@@ -648,52 +712,138 @@ if (is_dir($geojsonDir)) {
             });
     }
 
-    // Initial poll and subsequent interval
-    pollFeed();
-    setInterval(pollFeed, 5000);
+    let pollTimer = null;
+    function startPolling() {
+        if (pollTimer) {
+            return;
+        }
+        pollFeed();
+        pollTimer = setInterval(pollFeed, 5000);
+    }
 
     // Settings panel toggling
     const settingsToggle = document.getElementById('settingsToggle');
     const settingsPanel = document.getElementById('settingsPanel');
+    const airacUpdateBtn = document.getElementById('airacUpdateBtn');
+    const airacSpinner = document.getElementById('airacSpinner');
+    const airacConsole = document.getElementById('airacConsole');
     settingsToggle.addEventListener('click', () => {
         settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
         settingsToggle.textContent = settingsPanel.style.display === 'none' ? 'Open Settings' : 'Close Settings';
         // populate inputs with current settings
-        document.getElementById('airportInput').value = settings.airportIcao;
-        document.getElementById('airportLatInput').value = settings.airportLat;
-        document.getElementById('airportLonInput').value = settings.airportLon;
-        document.getElementById('ringDistances').value = settings.ringDistances.join(',');
-        document.getElementById('ringColour').value = settings.ringColour;
-        document.getElementById('ringStyle').value = settings.ringStyle;
-        document.getElementById('labelFontSize').value = settings.labelSize;
-        document.getElementById('labelColour').value = settings.labelColour;
-        document.getElementById('showAltitude').checked = settings.showAltitude;
-        document.getElementById('showSpeed').checked = settings.showSpeed;
-        document.getElementById('showVerticalSpeed').checked = settings.showVerticalSpeed;
-        document.getElementById('showTrack').checked = settings.showTrack;
-        document.getElementById('showSquawk').checked = settings.showSquawk;
+        document.getElementById('airportInput').value = settings.airport.icao;
+        document.getElementById('airportLatInput').value = settings.airport.lat;
+        document.getElementById('airportLonInput').value = settings.airport.lon;
+        document.getElementById('radiusInput').value = settings.radius_nm;
+        document.getElementById('ringDistances').value = settings.rings.distances.join(',');
+        document.getElementById('ringColour').value = settings.rings.style.color;
+        document.getElementById('ringWeight').value = settings.rings.style.weight;
+        document.getElementById('ringDash').value = settings.rings.style.dash;
+        document.getElementById('labelFontSize').value = settings.labels.font_size;
+        document.getElementById('labelColour').value = settings.labels.color;
+        document.getElementById('showAltitude').checked = settings.labels.show_alt;
+        document.getElementById('showSpeed').checked = settings.labels.show_gs;
+        document.getElementById('showVerticalSpeed').checked = settings.labels.show_vs;
+        document.getElementById('showTrack').checked = settings.labels.show_trk;
+        document.getElementById('showSquawk').checked = settings.labels.show_sqk;
+        airacUpdateBtn.style.display = airacUpdateEnabled ? 'inline-block' : 'none';
     });
     // Apply settings on button click
     document.getElementById('applySettings').addEventListener('click', () => {
-        settings.airportIcao = document.getElementById('airportInput').value.trim().toUpperCase();
-        settings.airportLat = parseFloat(document.getElementById('airportLatInput').value);
-        settings.airportLon = parseFloat(document.getElementById('airportLonInput').value);
-        // parse ring distances
+        settings.airport.icao = document.getElementById('airportInput').value.trim().toUpperCase();
+        settings.airport.lat = parseFloat(document.getElementById('airportLatInput').value);
+        settings.airport.lon = parseFloat(document.getElementById('airportLonInput').value);
+        const radiusVal = parseFloat(document.getElementById('radiusInput').value);
+        settings.radius_nm = isNaN(radiusVal) ? settings.radius_nm : Math.min(250, Math.max(1, radiusVal));
         const rd = document.getElementById('ringDistances').value.split(',').map(x => parseFloat(x));
-        settings.ringDistances = rd.filter(x => !isNaN(x) && x > 0);
-        settings.ringColour = document.getElementById('ringColour').value;
-        settings.ringStyle = document.getElementById('ringStyle').value;
-        settings.labelSize = parseInt(document.getElementById('labelFontSize').value, 10) || settings.labelSize;
-        settings.labelColour = document.getElementById('labelColour').value;
-        settings.showAltitude = document.getElementById('showAltitude').checked;
-        settings.showSpeed = document.getElementById('showSpeed').checked;
-        settings.showVerticalSpeed = document.getElementById('showVerticalSpeed').checked;
-        settings.showTrack = document.getElementById('showTrack').checked;
-        settings.showSquawk = document.getElementById('showSquawk').checked;
-        applySettings();
-        settingsPanel.style.display = 'none';
-        settingsToggle.textContent = 'Open Settings';
+        settings.rings.distances = rd.filter(x => !isNaN(x) && x > 0);
+        settings.rings.style.color = document.getElementById('ringColour').value;
+        settings.rings.style.weight = parseFloat(document.getElementById('ringWeight').value) || settings.rings.style.weight;
+        settings.rings.style.dash = document.getElementById('ringDash').value;
+        settings.labels.font_size = parseInt(document.getElementById('labelFontSize').value, 10) || settings.labels.font_size;
+        settings.labels.color = document.getElementById('labelColour').value;
+        settings.labels.show_alt = document.getElementById('showAltitude').checked;
+        settings.labels.show_gs = document.getElementById('showSpeed').checked;
+        settings.labels.show_vs = document.getElementById('showVerticalSpeed').checked;
+        settings.labels.show_trk = document.getElementById('showTrack').checked;
+        settings.labels.show_sqk = document.getElementById('showSquawk').checked;
+        saveSettings();
     });
+
+    function saveSettings() {
+        fetch('api/settings.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(settings),
+        })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.settings) {
+                    settings = data.settings;
+                    airacUpdateEnabled = !!data.airac_update_enabled;
+                    applySettings();
+                    settingsPanel.style.display = 'none';
+                    settingsToggle.textContent = 'Open Settings';
+                    showNotification('Settings saved');
+                }
+            })
+            .catch(() => {
+                showNotification('Failed to save settings');
+            });
+    }
+
+    function loadSettings() {
+        fetch('api/settings.php')
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.settings) {
+                    settings = data.settings;
+                }
+                airacUpdateEnabled = !!data.airac_update_enabled;
+                applySettings();
+                startPolling();
+            })
+            .catch(() => {
+                applySettings();
+                startPolling();
+            });
+    }
+
+    airacUpdateBtn.addEventListener('click', () => {
+        if (!airacUpdateEnabled) {
+            return;
+        }
+        airacSpinner.style.display = 'inline-block';
+        airacConsole.style.display = 'block';
+        airacConsole.textContent = 'Running AIRAC update...';
+        fetch('api/admin/airac_update.php', { method: 'POST' })
+            .then(resp => resp.json())
+            .then(data => {
+                const output = [
+                    `OK: ${data.ok}`,
+                    `Exit code: ${data.exit_code}`,
+                    `Started: ${data.started_at}`,
+                    `Finished: ${data.finished_at}`,
+                    '',
+                    'STDOUT:',
+                    data.stdout || '(empty)',
+                    '',
+                    'STDERR:',
+                    data.stderr || '(empty)',
+                ].join('\n');
+                airacConsole.textContent = output;
+            })
+            .catch(() => {
+                airacConsole.textContent = 'AIRAC update failed to start.';
+            })
+            .finally(() => {
+                airacSpinner.style.display = 'none';
+            });
+    });
+
+    loadSettings();
     </script>
 </body>
 </html>

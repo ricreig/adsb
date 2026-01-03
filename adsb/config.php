@@ -13,10 +13,12 @@ return [
         'lon' => -116.97000,
     ],
 
-    // Base map tile URL.  The default is a neutral background without labels
-    // (the CartoDB "Voyager" tileset).  You can change this to any tile
-    // provider that supports standard {z}/{x}/{y} URL patterns.
-    'basemap' => 'https://basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+    // Base map tile URLs (no-labels). The primary is preferred; the fallback
+    // is used automatically if the primary provider fails.
+    'basemap' => 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+    'basemap_fallback' => 'https://tiles.stadiamaps.com/tiles/alidade_smooth_nolabels/{z}/{x}/{y}{r}.png',
+    'basemap_attribution' => '&copy; OpenStreetMap contributors, &copy; CARTO',
+    'basemap_fallback_attribution' => '&copy; OpenStreetMap contributors, &copy; Stadia Maps, &copy; OpenMapTiles',
 
     // Airplanes.live API endpoint.  This endpoint returns aircraft tracks
     // within a specified radius of a point.  Replace with your own provider
@@ -43,6 +45,13 @@ return [
     // update_airspace.php script for details on generating these files from
     // the vatmex dataset.
     'geojson_dir' => __DIR__ . '/data',
+
+    // Settings persistence (SQLite).
+    'settings_db' => __DIR__ . '/data/adsb.sqlite',
+
+    // VATMEX AIRAC update settings. The directory is configured on the server.
+    'vatmex_dir' => null,
+    'airac_update_enabled' => false,
 
     // Optional API key for flight plan lookups.  Some services require a
     // token – configure it here and implement the lookup in get_flight_plan().

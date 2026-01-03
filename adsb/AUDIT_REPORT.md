@@ -44,7 +44,7 @@ restricted-areas.geojson,5,338,338,0
 tma.geojson,398,13646,12892,0
 ```
 
-**Script de validación (entregable):** `scripts/validate_geojson.py`
+**Script de validación (entregable):** `scripts/validate_geojson.php`
 
 ### 1.3 Auditoría de backend (revisión estática)
 
@@ -93,7 +93,7 @@ tma.geojson,398,13646,12892,0
 ## 4) Evidencia técnica (comandos locales)
 
 - Validación GeoJSON:
-  - `python /workspace/adsb/adsb/scripts/validate_geojson.py`
+  - `php /workspace/adsb/adsb/scripts/validate_geojson.php`
 - Smoke test HTTP local:
   - `php -S 127.0.0.1:8000 -t /workspace/adsb/adsb > /tmp/adsb-php.log 2>&1 &`
   - `curl -sS -D - http://127.0.0.1:8000/ -o /tmp/adsb_index.html`
