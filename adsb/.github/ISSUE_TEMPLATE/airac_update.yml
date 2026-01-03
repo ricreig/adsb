@@ -1,0 +1,38 @@
+name: AIRAC update
+description: Checklist para actualizar datasets AIRAC
+title: "[AIRAC] "
+labels: [airac]
+body:
+  - type: markdown
+    attributes:
+      value: "Sigue este checklist para actualizar los GeoJSON y catalog.json."
+  - type: textarea
+    id: sources
+    attributes:
+      label: Fuentes/commit
+      description: "Incluye commit hash o tag del dataset VATMEX/navdata."
+      placeholder: "vatmex-mmfr-sector @ abc1234"
+    validations:
+      required: true
+  - type: checkboxes
+    id: steps
+    attributes:
+      label: Pasos completados
+      options:
+        - label: "Actualizar datasets (git pull / descarga)."
+          required: true
+        - label: "Ejecutar update_airspace.php contra la nueva fuente."
+          required: true
+        - label: "Ejecutar scripts/validate_geojson.* con out_of_range=0."
+          required: true
+        - label: "Generar data/catalog.json actualizado."
+          required: true
+        - label: "Smoke test local sin errores de consola."
+          required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Salida de validate_geojson
+      render: shell
+    validations:
+      required: true
