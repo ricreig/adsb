@@ -10,9 +10,11 @@
 
 // Load configuration
 $config = require __DIR__ . '/config.php';
-$base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+$base = '/' . trim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
 if ($base === '/') {
-    $base = '';
+    $base = '/';
+} else {
+    $base .= '/';
 }
 
 // Discover available GeoJSON layers.  Each file in the configured
@@ -41,14 +43,12 @@ if (is_dir($geojsonDir)) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Mexican Airspace Display</title>
-    <!-- Leaflet CSS: CDN primary + local fallback -->
+    <!-- Leaflet CSS: local primary (Safari-safe) with CDN fallback -->
     <link
         id="leaflet-css"
         rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-D4o8gbzKmClWazdh7szkT1gG5b6yoZn6g8hmrmMcvm8="
-        crossorigin="anonymous"
-        onerror="this.onerror=null;this.href='<?php echo htmlspecialchars($base . '/assets/vendor/leaflet/leaflet.css'); ?>';"
+        href="<?php echo htmlspecialchars($base . 'assets/vendor/leaflet/leaflet.css'); ?>"
+        onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';"
     />
     <style>
         html, body {
@@ -79,6 +79,11 @@ if (is_dir($geojsonDir)) {
             left: 0;
             right: 320px;
             height: 100vh;
+        }
+        .leaflet-container img,
+        .leaflet-container .leaflet-tile {
+            max-width: none !important;
+            max-height: none !important;
         }
         #sidebar {
             position: absolute;
@@ -294,38 +299,66 @@ if (is_dir($geojsonDir)) {
     <script>
     window.ADSB_BASE_PATH = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
     window.ADSB_BASE = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
-    const BASE_URL = window.ADSB_BASE || window.ADSB_BASE_PATH || '';
+    function normalizeBasePath(basePath) {
+        if (!basePath) {
+            return '/';
+        }
+        const trimmed = basePath.replace(/^\/+|\/+$/g, '');
+        if (!trimmed) {
+            return '/';
+        }
+        return `/${trimmed}/`;
+    }
+    const ADSB_BASE = normalizeBasePath(window.ADSB_BASE || window.ADSB_BASE_PATH || '/');
+    window.ADSB_BASE = ADSB_BASE;
     function buildUrl(path) {
         if (!path) {
-            return BASE_URL || '';
+            return location.origin + ADSB_BASE;
         }
         if (/^https?:\/\//i.test(path)) {
             return path;
         }
         const cleanPath = path.replace(/^\/+/, '');
-        if (!BASE_URL) {
-            return cleanPath;
-        }
-        return BASE_URL + '/' + cleanPath;
+        return `${location.origin}${ADSB_BASE}${cleanPath}`;
     }
     function apiUrl(path) {
         const cleanPath = path.replace(/^\/+/, '');
         if (cleanPath.startsWith('api/')) {
             return buildUrl(cleanPath);
         }
-        return buildUrl('api/' + cleanPath);
+        return buildUrl(`api/${cleanPath}`);
     }
 
     // PHP passes the list of available GeoJSON layers as JSON here.
     const geojsonLayers = <?php echo json_encode($layerFiles, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES); ?>;
     const errorOverlay = document.getElementById('errorOverlay');
     const errorLog = [];
+    const diagnostics = {
+        healthStatus: 'pending',
+        healthDetail: null,
+        leafletSource: 'unknown',
+        leafletUrl: null,
+    };
+
+    function renderDiagnostics() {
+        const lines = [
+            'Diagnostics',
+            `Health: ${diagnostics.healthStatus}`,
+            diagnostics.healthDetail ? `Health detail: ${diagnostics.healthDetail}` : null,
+            `Leaflet: ${diagnostics.leafletSource}`,
+            diagnostics.leafletUrl ? `Leaflet URL: ${diagnostics.leafletUrl}` : null,
+        ].filter(Boolean);
+        if (errorLog.length) {
+            lines.push('', 'Errors:', ...errorLog);
+        }
+        errorOverlay.textContent = lines.join('\n');
+        errorOverlay.style.display = 'block';
+    }
 
     function reportError(message, detail) {
         const line = detail ? `${message}\n${detail}` : message;
         errorLog.push(line);
-        errorOverlay.textContent = errorLog.join('\n\n');
-        errorOverlay.style.display = 'block';
+        renderDiagnostics();
     }
 
     window.addEventListener('error', (event) => {
@@ -338,14 +371,40 @@ if (is_dir($geojsonDir)) {
         reportError('Unhandled promise rejection', reason);
     });
 
+    function formatFetchErrorDetail(err, fallbackUrl) {
+        if (!err) {
+            return fallbackUrl ? `URL: ${fallbackUrl}` : 'Unknown error';
+        }
+        const detailLines = [];
+        if (err.url || fallbackUrl) {
+            detailLines.push(`URL: ${err.url || fallbackUrl}`);
+        }
+        if (err.status) {
+            detailLines.push(`HTTP ${err.status}${err.statusText ? ` ${err.statusText}` : ''}`);
+        }
+        if (err.message) {
+            detailLines.push(`Error: ${err.message}`);
+        }
+        if (err.body) {
+            detailLines.push(`Response: ${err.body.slice(0, 200)}`);
+        }
+        return detailLines.join('\n');
+    }
+
     function fetchJson(url, options, context) {
-        return fetch(url, options).then(resp => {
+        return fetch(url, options).then(async resp => {
             if (!resp.ok) {
-                throw new Error(`${context || 'Request failed'} (${resp.status}) ${resp.statusText}`);
+                const body = await resp.text().catch(() => '');
+                const error = new Error(`${context || 'Request failed'} (${resp.status}) ${resp.statusText}`);
+                error.status = resp.status;
+                error.statusText = resp.statusText;
+                error.url = url;
+                error.body = body;
+                throw error;
             }
             return resp.json();
         }).catch(err => {
-            reportError(context || 'Fetch error', err.message || String(err));
+            reportError(context || 'Fetch error', formatFetchErrorDetail(err, url));
             throw err;
         });
     }
@@ -371,8 +430,6 @@ if (is_dir($geojsonDir)) {
         const urls = [
             {
                 url: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-                integrity: 'sha256-o1w/X8WdUNwH5tXbSb5Cqx630DGm9LdlVNV4cCZmZyQ=',
-                crossorigin: 'anonymous',
             },
             {
                 url: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
@@ -389,7 +446,8 @@ if (is_dir($geojsonDir)) {
             try {
                 await loadScript(url, entry);
                 if (window.L) {
-                    return { loaded: true, url, attempted };
+                    const source = url.includes('/assets/vendor/leaflet/leaflet.js') ? 'local' : 'cdn';
+                    return { loaded: true, url, attempted, source };
                 }
                 failures.push(`${url} (loaded but L undefined)`);
             } catch (err) {
@@ -403,8 +461,13 @@ if (is_dir($geojsonDir)) {
         const url = buildUrl('health.php');
         fetchJson(url, {}, `Health check (${url})`)
             .then(data => {
+                diagnostics.healthStatus = data && data.status ? data.status : 'unknown';
+                diagnostics.healthDetail = data ? JSON.stringify(data, null, 2) : null;
                 if (!data || data.status !== 'ok') {
                     reportError('Health check reported degraded status', JSON.stringify(data, null, 2));
+                }
+                if (errorOverlay.style.display === 'block') {
+                    renderDiagnostics();
                 }
             })
             .catch(() => {});
@@ -1015,6 +1078,8 @@ if (is_dir($geojsonDir)) {
         checkHealth();
         const result = await loadLeaflet();
         if (!result.loaded || !window.L) {
+            diagnostics.leafletSource = 'failed';
+            diagnostics.leafletUrl = null;
             const detailLines = [
                 'Leaflet failed to load (L undefined).',
                 '',
@@ -1028,6 +1093,11 @@ if (is_dir($geojsonDir)) {
             ];
             reportError('Leaflet failed to load (L undefined)', detailLines.join('\n'));
             return;
+        }
+        diagnostics.leafletSource = result.source || 'unknown';
+        diagnostics.leafletUrl = result.url || null;
+        if (errorOverlay.style.display === 'block') {
+            renderDiagnostics();
         }
         initLeafletApp();
     });

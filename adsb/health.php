@@ -5,11 +5,13 @@ header('Content-Type: application/json; charset=utf-8');
 
 $config = require __DIR__ . '/config.php';
 
-$base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+$base = '/' . trim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
 if ($base === '/') {
-    $base = '';
+    $base = '/';
+} else {
+    $base .= '/';
 }
-$apiBase = $base ? $base . '/api' : '/api';
+$apiBase = $base === '/' ? '/api/' : $base . 'api/';
 
 $dataDir = __DIR__ . '/data';
 $cacheDir = $config['feed_cache_dir'] ?? ($dataDir . '/cache');
