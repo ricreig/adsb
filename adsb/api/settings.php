@@ -12,6 +12,7 @@ $defaults = [
         'lon' => (float)$config['airport']['lon'],
     ],
     'radius_nm' => 250,
+    'poll_interval_ms' => (int)$config['poll_interval_ms'],
     'rings' => [
         'distances' => [50, 100, 150, 200, 250],
         'style' => [
@@ -95,6 +96,10 @@ function normalizeSettings(array $input, array $defaults): array
     $radius = filter_var($input['radius_nm'] ?? null, FILTER_VALIDATE_FLOAT);
     if ($radius !== false && $radius > 0) {
         $settings['radius_nm'] = min(250, (float)$radius);
+    }
+    $pollInterval = filter_var($input['poll_interval_ms'] ?? null, FILTER_VALIDATE_INT);
+    if ($pollInterval !== false && $pollInterval >= 500 && $pollInterval <= 5000) {
+        $settings['poll_interval_ms'] = (int)$pollInterval;
     }
 
     if (isset($input['rings']) && is_array($input['rings'])) {

@@ -37,3 +37,6 @@ Esto ejecuta (en servidor):
 ```bash
 php scripts/validate_geojson.php
 ```
+
+## Fuentes de datos geográficos
+- `data/mex-border.geojson`: contorno simplificado de México basado en Natural Earth (1:50m Admin 0 Countries, dominio público).

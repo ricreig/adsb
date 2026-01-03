@@ -24,11 +24,17 @@ return [
     // within a specified radius of a point.  Replace with your own provider
     // or mock endpoint as required.
     'adsb_feed_url' => 'https://api.airplanes.live/v2/point',
+    // Optional API key for the ADS-B feed provider (sent as a header).
+    'adsb_api_key' => null,
+    'adsb_api_header' => 'X-API-Key',
 
     // Radius of interest around the reference point in nautical miles.  The
     // Airplanes.live API accepts radius up to 250nm.  Use 250nm to provide
     // context but filter in feed.php to only show relevant aircraft.
     'adsb_radius' => 250,
+    // Feed cache TTL (milliseconds) and upstream rate limit (seconds).
+    'feed_cache_ttl_ms' => 1500,
+    'feed_rate_limit_s' => 1.0,
 
     // Hard coded latitude of the US–Mexico border near Tijuana.  Aircraft
     // north of this latitude plus the `north_buffer_nm` (converted to
@@ -48,6 +54,8 @@ return [
 
     // Settings persistence (SQLite).
     'settings_db' => __DIR__ . '/data/adsb.sqlite',
+    // Polling interval for the frontend (milliseconds).
+    'poll_interval_ms' => 1500,
 
     // VATMEX AIRAC update settings. The directory is configured on the server.
     'vatmex_dir' => null,
