@@ -34,24 +34,106 @@ if (!is_dir($outputDir)) {
 }
 
 /**
- * Convert lat/lon strings in DDMMSS.S format to decimal degrees.  vatSys
- * uses ISO 6709 formats; restricted areas often list coordinates as
- * +DDMMSS.SSS±DDDMMSS.SSS.  This helper handles those strings.
+ * Convert an ISO 6709 coordinate token to decimal degrees. Supports:
+ *  - ±DD.DDDD / ±DDD.DDDD (degrees)
+ *  - ±DDMM.M / ±DDDMM.M (degrees + minutes)
+ *  - ±DDMMSS.S / ±DDDMMSS.S (degrees + minutes + seconds)
+ *  - Optional hemisphere suffix (N/S/E/W)
  */
-function parseCoordinate(string $coord): float
+function parseCoordinate(string $coord): ?float
 {
-    $sign = ($coord[0] === '-') ? -1 : 1;
-    $coord = ltrim($coord, '+-');
-    [$whole, $fraction] = array_pad(explode('.', $coord, 2), 2, '');
-    if (strlen($whole) < 5) {
-        return 0.0;
+    $coord = trim($coord);
+    if ($coord === '') {
+        return null;
     }
-    $mmss = substr($whole, -4);
-    $degPart = substr($whole, 0, -4);
-    $deg = (int)$degPart;
-    $min = (int)substr($mmss, 0, 2);
-    $sec = (float)(substr($mmss, 2, 2) . ($fraction !== '' ? '.' . $fraction : ''));
-    return $sign * ($deg + $min / 60 + $sec / 3600);
+
+    $sign = 1;
+    $hemisphere = null;
+    if (preg_match('/[NSEW]$/i', $coord)) {
+        $hemisphere = strtoupper(substr($coord, -1));
+        $coord = substr($coord, 0, -1);
+    }
+    if (isset($coord[0]) && ($coord[0] === '-' || $coord[0] === '+')) {
+        $sign = ($coord[0] === '-') ? -1 : 1;
+        $coord = substr($coord, 1);
+    }
+    if ($hemisphere !== null) {
+        if ($hemisphere === 'S' || $hemisphere === 'W') {
+            $sign = -1;
+        } else {
+            $sign = 1;
+        }
+    }
+
+    if (!preg_match('/^\d+(?:\.\d+)?$/', $coord)) {
+        return null;
+    }
+
+    [$whole, $fraction] = array_pad(explode('.', $coord, 2), 2, '');
+    $len = strlen($whole);
+    $value = 0.0;
+
+    if ($len <= 3) {
+        $value = (float)$whole;
+        if ($fraction !== '') {
+            $value += (float)('0.' . $fraction);
+        }
+    } elseif ($len <= 5) {
+        $degLen = $len - 2;
+        $deg = (int)substr($whole, 0, $degLen);
+        $min = (int)substr($whole, -2);
+        $minFrac = $fraction !== '' ? (float)('0.' . $fraction) : 0.0;
+        $value = $deg + ($min + $minFrac) / 60;
+    } else {
+        $degLen = $len - 4;
+        $deg = (int)substr($whole, 0, $degLen);
+        $min = (int)substr($whole, $degLen, 2);
+        $sec = (int)substr($whole, -2);
+        $secFrac = $fraction !== '' ? (float)('0.' . $fraction) : 0.0;
+        $value = $deg + ($min / 60) + (($sec + $secFrac) / 3600);
+    }
+
+    return $sign * $value;
+}
+
+/**
+ * Parse a coordinate pair text token into a [lon, lat] array.
+ */
+function parseCoordinatePair(string $pair): ?array
+{
+    $pair = trim($pair);
+    if ($pair === '') {
+        return null;
+    }
+
+    if (preg_match('/^([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)$/', $pair, $m)) {
+        $lat = parseCoordinate($m[1]);
+        $lon = parseCoordinate($m[2]);
+        if ($lat === null || $lon === null) {
+            return null;
+        }
+        return [$lon, $lat];
+    }
+
+    if (preg_match('/^([+-]?\d+(?:\.\d+)?)([NS])[,\\s]+([+-]?\d+(?:\.\d+)?)([EW])$/i', $pair, $m)) {
+        $lat = parseCoordinate($m[1] . $m[2]);
+        $lon = parseCoordinate($m[3] . $m[4]);
+        if ($lat === null || $lon === null) {
+            return null;
+        }
+        return [$lon, $lat];
+    }
+
+    if (preg_match('/^([+-]?\d+(?:\.\d+)?)[,\\s]+([+-]?\d+(?:\.\d+)?)$/', $pair, $m)) {
+        $lat = parseCoordinate($m[1]);
+        $lon = parseCoordinate($m[2]);
+        if ($lat === null || $lon === null) {
+            return null;
+        }
+        return [$lon, $lat];
+    }
+
+    return null;
 }
 
 /**
@@ -86,12 +168,11 @@ function parseRestrictedAreas(string $file): array
             if ($pair === '') {
                 continue;
             }
-            if (!preg_match('/([+-]\d+\.\d+)([+-]\d+\.\d+)/', $pair, $m)) {
+            $coord = parseCoordinatePair($pair);
+            if ($coord === null) {
                 continue;
             }
-            $lat = parseCoordinate($m[1]);
-            $lon = parseCoordinate($m[2]);
-            $points[] = [$lon, $lat];
+            $points[] = $coord;
         }
         if (count($points) < 3) {
             continue;
@@ -134,12 +215,11 @@ function parseFirLimits(string $file): array
             if ($pair === '') {
                 continue;
             }
-            if (!preg_match('/([+-]\d+\.\d+)([+-]\d+\.\d+)/', $pair, $m)) {
+            $coord = parseCoordinatePair($pair);
+            if ($coord === null) {
                 continue;
             }
-            $lat = parseCoordinate($m[1]);
-            $lon = parseCoordinate($m[2]);
-            $points[] = [$lon, $lat];
+            $points[] = $coord;
         }
         if (empty($points)) {
             continue;
@@ -204,7 +284,7 @@ function parseNavData(string $navPath): array
  * element becomes either a LineString or Polygon (if closed).  Returns an
  * array of features with a basic name and optional category.
  */
-function parseMapFile(string $file, string $category = null): array
+function parseMapFile(string $file, ?string $category = null): array
 {
     if (!file_exists($file)) {
         return [];
@@ -227,12 +307,11 @@ function parseMapFile(string $file, string $category = null): array
                 if ($pair === '') {
                     continue;
                 }
-                if (!preg_match('/([+-]\d+\.\d+)([+-]\d+\.\d+)/', $pair, $m)) {
+                $coord = parseCoordinatePair($pair);
+                if ($coord === null) {
                     continue;
                 }
-                $lat = parseCoordinate($m[1]);
-                $lon = parseCoordinate($m[2]);
-                $points[] = [$lon, $lat];
+                $points[] = $coord;
             }
             if (empty($points)) {
                 continue;
@@ -256,13 +335,12 @@ function parseMapFile(string $file, string $category = null): array
 }
 
 /**
- * Recursively scan a directory for specific map files by suffix and return
- * an array keyed by category.  The mapping from suffix to category is
- * defined in the array $categories.  Each entry lists the suffix pattern
- * (case sensitive) and the resulting output layer name.  E.g.
- * ['_TMA.xml' => 'tma']
+ * Recursively scan a directory for map files and return an array keyed by
+ * category.  The mapping from filename patterns to category names is
+ * defined in $categoryMatchers. Each entry lists regex patterns to test
+ * against the file name.
  */
-function parseAllMaps(string $mapsDir, array $categories): array
+function parseAllMaps(string $mapsDir, array $categoryMatchers): array
 {
     $results = [];
     $iterator = new RecursiveIteratorIterator(
@@ -271,20 +349,148 @@ function parseAllMaps(string $mapsDir, array $categories): array
     foreach ($iterator as $fileInfo) {
         $filePath = $fileInfo->getPathname();
         $fileName = $fileInfo->getFilename();
-        foreach ($categories as $suffix => $layer) {
-            if (substr($fileName, -strlen($suffix)) === $suffix) {
-                $features = parseMapFile($filePath, $layer);
-                if (!empty($features)) {
-                    if (!isset($results[$layer])) {
-                        $results[$layer] = [];
-                    }
-                    $results[$layer] = array_merge($results[$layer], $features);
+        $layer = null;
+        foreach ($categoryMatchers as $category => $patterns) {
+            foreach ($patterns as $pattern) {
+                if (preg_match($pattern, $fileName)) {
+                    $layer = $category;
+                    break 2;
                 }
-                break;
             }
+        }
+        if ($layer === null) {
+            continue;
+        }
+        $features = parseMapFile($filePath, $layer);
+        if (!empty($features)) {
+            if (!isset($results[$layer])) {
+                $results[$layer] = [];
+            }
+            $results[$layer] = array_merge($results[$layer], $features);
         }
     }
     return $results;
+}
+
+/**
+ * Build catalog metadata for generated GeoJSON layers.
+ */
+function buildCatalog(string $outputDir, array $metadata = []): void
+{
+    $files = glob($outputDir . '/*.geojson');
+    $layers = [];
+    $overallBbox = null;
+    foreach ($files as $file) {
+        $stats = geojsonStats($file);
+        if ($stats === null) {
+            continue;
+        }
+        $layers[$stats['name']] = $stats;
+        if ($stats['bbox'] !== null) {
+            if ($overallBbox === null) {
+                $overallBbox = $stats['bbox'];
+            } else {
+                $overallBbox = [
+                    min($overallBbox[0], $stats['bbox'][0]),
+                    min($overallBbox[1], $stats['bbox'][1]),
+                    max($overallBbox[2], $stats['bbox'][2]),
+                    max($overallBbox[3], $stats['bbox'][3]),
+                ];
+            }
+        }
+    }
+
+    $catalog = array_merge([
+        'generated_at' => gmdate('c'),
+        'bbox' => $overallBbox,
+        'layers' => $layers,
+    ], $metadata);
+
+    $path = $outputDir . '/catalog.json';
+    file_put_contents($path, json_encode($catalog, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    echo "Written: $path\n";
+}
+
+function geojsonStats(string $path): ?array
+{
+    $data = json_decode(file_get_contents($path), true);
+    if (!is_array($data)) {
+        return null;
+    }
+    $features = $data['features'] ?? [];
+    $bbox = null;
+    $coords = 0;
+    foreach ($features as $feature) {
+        $geometry = $feature['geometry'] ?? null;
+        if (!is_array($geometry)) {
+            continue;
+        }
+        $coords += updateBboxFromCoords($geometry['coordinates'] ?? null, $bbox);
+    }
+    $name = basename($path, '.geojson');
+    return [
+        'name' => $name,
+        'file' => basename($path),
+        'features' => count($features),
+        'coords' => $coords,
+        'bytes' => filesize($path),
+        'bbox' => $bbox,
+    ];
+}
+
+function updateBboxFromCoords($coords, ?array &$bbox): int
+{
+    $count = 0;
+    if (!is_array($coords)) {
+        return $count;
+    }
+    if (count($coords) === 2 && is_numeric($coords[0]) && is_numeric($coords[1])) {
+        $lon = (float)$coords[0];
+        $lat = (float)$coords[1];
+        if ($bbox === null) {
+            $bbox = [$lon, $lat, $lon, $lat];
+        } else {
+            $bbox[0] = min($bbox[0], $lon);
+            $bbox[1] = min($bbox[1], $lat);
+            $bbox[2] = max($bbox[2], $lon);
+            $bbox[3] = max($bbox[3], $lat);
+        }
+        return 1;
+    }
+    foreach ($coords as $item) {
+        $count += updateBboxFromCoords($item, $bbox);
+    }
+    return $count;
+}
+
+function detectAirac(string $basePath): ?string
+{
+    $candidates = [
+        $basePath . '/AIRAC.txt',
+        $basePath . '/airac.txt',
+        $basePath . '/README.md',
+        $basePath . '/metadata.json',
+    ];
+    foreach ($candidates as $candidate) {
+        if (!file_exists($candidate)) {
+            continue;
+        }
+        $contents = file_get_contents($candidate);
+        if ($contents && preg_match('/AIRAC\\s*[:#-]?\\s*([0-9]{4,6})/i', $contents, $m)) {
+            return $m[1];
+        }
+    }
+    return null;
+}
+
+function detectVatmexCommit(string $basePath): ?string
+{
+    $gitDir = $basePath . '/.git';
+    if (!is_dir($gitDir)) {
+        return null;
+    }
+    $commit = trim((string)shell_exec('git -C ' . escapeshellarg($basePath) . ' rev-parse --short HEAD 2>/dev/null'));
+    return $commit !== '' ? $commit : null;
 }
 
 // 1. Restricted areas
@@ -302,22 +508,23 @@ if (!empty($firFeatures)) {
     writeGeoJSON('fir-limits', $firFeatures, $outputDir);
 }
 
-// 3. Parse system maps for TMA, CTR, ATZ, ACC, MVA.  Suffix mapping can be
-// customised here.  We consider any file ending in these suffixes and
-// group the output features accordingly.  Additional suffixes can be
-// appended to extend coverage.
-$suffixMapping = [
-    '_TMA.xml' => 'tma',
-    '_CTR.xml' => 'ctr',
-    '_ATZ.xml' => 'atz',
-    '_ACC.xml' => 'acc',
-    '_MVA.xml' => 'mva',
-    '_MRA.xml' => 'mva',
+// 3. Parse system maps for additional categories beyond the classic
+// TMA/CTR/ATZ/ACC/MVA/MRA suffixes.  We scan all map files and classify
+// them using regex patterns on the file name to expand coverage.
+$categoryMatchers = [
+    'tma' => ['/_TMA/i', '/\\bTMA\\b/i'],
+    'ctr' => ['/_CTR/i', '/\\bCTR\\b/i'],
+    'atz' => ['/_ATZ/i', '/\\bATZ\\b/i'],
+    'acc' => ['/_ACC/i', '/\\bACC\\b/i'],
+    'cta' => ['/_CTA/i', '/\\bCTA\\b/i'],
+    'fir' => ['/_FIR/i', '/\\bFIR\\b/i'],
+    'mva' => ['/_MVA/i', '/_MRA/i', '/\\bMVA\\b/i', '/\\bMRA\\b/i', '/MINIMAS/i', '/VECTOREO/i'],
+    'airways' => ['/_AWY/i', '/\\bAIRWAY\\b/i', '/_UTA/i', '/_LTA/i', '/_UIR/i'],
+    'procedures' => ['/_SID/i', '/_STAR/i', '/_APP/i', '/\\bSID\\b/i', '/\\bSTAR\\b/i', '/\\bAPP\\b/i'],
+    'vfr' => ['/_VFR/i', '/\\bVFR\\b/i', '/CORRIDOR/i'],
+    'sectors' => ['/_SECTOR/i', '/SECTOR/i'],
 ];
-// Additionally include MVA/Minimas lines contained in map names with
-// "Minimas" or "Vectoreo" inside the file, assign to MVA layer.  We'll
-// search and re‑parse those lines explicitly later.
-$mapLayers = parseAllMaps($basePath . '/Maps', $suffixMapping);
+$mapLayers = parseAllMaps($basePath . '/Maps', $categoryMatchers);
 foreach ($mapLayers as $layerName => $features) {
     if (!empty($features)) {
         writeGeoJSON($layerName, $features, $outputDir);
@@ -332,5 +539,12 @@ if (is_dir($navDataPath)) {
         writeGeoJSON('nav-points', $navFeatures, $outputDir);
     }
 }
+
+// 5. Catalog metadata
+$metadata = [
+    'airac' => detectAirac($basePath),
+    'vatmex_commit' => detectVatmexCommit($basePath),
+];
+buildCatalog($outputDir, $metadata);
 
 echo "Update complete.\n";
