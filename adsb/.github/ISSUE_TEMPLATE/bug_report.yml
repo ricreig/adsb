@@ -1,0 +1,61 @@
+name: Bug report
+description: Reporta un bug del radar ATC
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Gracias por reportar. Completa todos los campos con evidencia."
+  - type: input
+    id: environment
+    attributes:
+      label: Entorno
+      description: "Local / staging / producción"
+      placeholder: "Local"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Pasos para reproducir
+      description: "Incluye clicks, filtros y configuración relevante."
+      placeholder: "1. ... 2. ... 3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+      placeholder: "Qué esperabas que ocurriera."
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Resultado actual
+      placeholder: "Qué ocurrió realmente."
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Consola del navegador
+      description: "Pega errores/advertencias de DevTools."
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: network
+    attributes:
+      label: Network (DevTools)
+      description: "Incluye fallos de fetch (feed.php, geojson)."
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Capturas
+      description: "Adjunta capturas o GIFs."
+    validations:
+      required: false

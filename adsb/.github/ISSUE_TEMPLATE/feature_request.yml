@@ -1,0 +1,36 @@
+name: Feature request
+description: Solicitud de mejora o nueva funcionalidad
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: "Describe claramente el problema que quieres resolver y el impacto ATC." 
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema / necesidad
+      placeholder: "Como controlador, necesito..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Propuesta de solución
+      placeholder: "Agregar..."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+      placeholder: "Opción A, Opción B..."
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: Alcance y criterios de aceptación
+      placeholder: "Debe cumplir con..."
+    validations:
+      required: true
