@@ -34,7 +34,11 @@ return [
     'adsb_radius' => 250,
     // Feed cache TTL (milliseconds) and upstream rate limit (seconds).
     'feed_cache_ttl_ms' => 1500,
+    // Maximum staleness allowed when serving cached data during rate limiting (milliseconds).
+    'feed_cache_max_stale_ms' => 5000,
     'feed_rate_limit_s' => 1.0,
+    // Cache directory for feed responses and upstream rate limiting.
+    'feed_cache_dir' => __DIR__ . '/data/cache',
 
     // Hard coded latitude of the US–Mexico border near Tijuana.  Aircraft
     // north of this latitude plus the `north_buffer_nm` (converted to

@@ -151,6 +151,21 @@ if (is_dir($geojsonDir)) {
             font-size: 12px;
             z-index: 1000;
         }
+        #errorOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #b03a2e;
+            color: #fff;
+            padding: 6px 10px;
+            font-size: 12px;
+            z-index: 2000;
+            display: none;
+            max-height: 160px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
         .settings-section {
             margin-top: 10px;
             padding-top: 8px;
@@ -185,6 +200,7 @@ if (is_dir($geojsonDir)) {
     <div id="map"></div>
     <div id="tileStatus">Basemap fallback activated.</div>
     <div id="feedError" style="display:none;position:absolute;top:10px;right:340px;background:#b03a2e;color:#fff;padding:6px 10px;border-radius:4px;z-index:1000;max-width:360px;"></div>
+    <div id="errorOverlay"></div>
     <div id="sidebar">
         <h2>Airspace Layers</h2>
         <div id="layerControls"></div>
@@ -273,17 +289,61 @@ if (is_dir($geojsonDir)) {
     <script>
     window.ADSB_BASE_PATH = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
     window.ADSB_BASE = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
-    const BASE_URL = window.ADSB_BASE_PATH || '';
+    const BASE_URL = window.ADSB_BASE || window.ADSB_BASE_PATH || '';
     function buildUrl(path) {
+        if (!path) {
+            return BASE_URL || '';
+        }
+        if (/^https?:\/\//i.test(path)) {
+            return path;
+        }
         const cleanPath = path.replace(/^\/+/, '');
         if (!BASE_URL) {
             return cleanPath;
         }
         return BASE_URL + '/' + cleanPath;
     }
+    function apiUrl(path) {
+        const cleanPath = path.replace(/^\/+/, '');
+        if (cleanPath.startsWith('api/')) {
+            return buildUrl(cleanPath);
+        }
+        return buildUrl('api/' + cleanPath);
+    }
 
     // PHP passes the list of available GeoJSON layers as JSON here.
     const geojsonLayers = <?php echo json_encode($layerFiles, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES); ?>;
+    const errorOverlay = document.getElementById('errorOverlay');
+    const errorLog = [];
+
+    function reportError(message, detail) {
+        const line = detail ? `${message}\n${detail}` : message;
+        errorLog.push(line);
+        errorOverlay.textContent = errorLog.join('\n\n');
+        errorOverlay.style.display = 'block';
+    }
+
+    window.addEventListener('error', (event) => {
+        if (!event) return;
+        const detail = event.filename ? `${event.filename}:${event.lineno || ''}` : '';
+        reportError(event.message || 'Unhandled error', detail);
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+        const reason = event.reason && event.reason.message ? event.reason.message : String(event.reason || 'Unknown rejection');
+        reportError('Unhandled promise rejection', reason);
+    });
+
+    function fetchJson(url, options, context) {
+        return fetch(url, options).then(resp => {
+            if (!resp.ok) {
+                throw new Error(`${context || 'Request failed'} (${resp.status}) ${resp.statusText}`);
+            }
+            return resp.json();
+        }).catch(err => {
+            reportError(context || 'Fetch error', err.message || String(err));
+            throw err;
+        });
+    }
 
     // Create the map
     const map = L.map('map', {
@@ -366,8 +426,7 @@ if (is_dir($geojsonDir)) {
             return;
         }
         const url = buildUrl(geojsonLayers[id]);
-        fetch(url)
-            .then(resp => resp.json())
+        fetchJson(url, {}, `GeoJSON layer ${id}`)
             .then(data => {
                 const layer = L.geoJSON(data, {
                     style: feature => {
@@ -727,8 +786,7 @@ if (is_dir($geojsonDir)) {
         }
         const radius = Math.min(250, settings.radius_nm || 250);
         const url = buildUrl('feed.php') + '?lat=' + encodeURIComponent(settings.airport.lat) + '&lon=' + encodeURIComponent(settings.airport.lon) + '&radius_nm=' + encodeURIComponent(radius);
-        fetch(url)
-            .then(resp => resp.json())
+        fetchJson(url, {}, 'Feed request')
             .then(data => {
                 if (!data.ok) {
                     showFeedError(data.error || 'Upstream feed unavailable.');
@@ -814,14 +872,13 @@ if (is_dir($geojsonDir)) {
     });
 
     function saveSettings() {
-        fetch(buildUrl('api/settings.php'), {
+        fetchJson(apiUrl('settings.php'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(settings),
         })
-            .then(resp => resp.json())
             .then(data => {
                 if (data.settings) {
                     settings = data.settings;
@@ -839,8 +896,7 @@ if (is_dir($geojsonDir)) {
     }
 
     function loadSettings() {
-        fetch(buildUrl('api/settings.php'))
-            .then(resp => resp.json())
+        fetchJson(apiUrl('settings.php'), {}, 'Load settings')
             .then(data => {
                 if (data.settings) {
                     settings = data.settings;
@@ -862,8 +918,7 @@ if (is_dir($geojsonDir)) {
         airacSpinner.style.display = 'inline-block';
         airacConsole.style.display = 'block';
         airacConsole.textContent = 'Running AIRAC update...';
-        fetch(buildUrl('api/admin/airac_update.php'), { method: 'POST' })
-            .then(resp => resp.json())
+        fetchJson(apiUrl('admin/airac_update.php'), { method: 'POST' }, 'AIRAC update')
             .then(data => {
                 const output = [
                     `OK: ${data.ok}`,
