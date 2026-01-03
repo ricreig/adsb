@@ -27,8 +27,19 @@ $defaults = [
         'show_vs' => true,
         'show_trk' => true,
         'show_sqk' => true,
+        'show_labels' => true,
+        'min_zoom' => 7,
         'font_size' => 12,
         'color' => '#00ff00',
+    ],
+    'display' => [
+        'basemap' => 'dark',
+    ],
+    'navpoints' => [
+        'enabled' => true,
+        'min_zoom' => 7,
+        'zone' => 'all',
+        'max_points' => 2000,
     ],
     'category_styles' => [
         'default' => [
@@ -137,6 +148,11 @@ function normalizeSettings(array $input, array $defaults): array
         $settings['labels']['show_vs'] = normalizeBoolean($input['labels']['show_vs'] ?? $settings['labels']['show_vs']);
         $settings['labels']['show_trk'] = normalizeBoolean($input['labels']['show_trk'] ?? $settings['labels']['show_trk']);
         $settings['labels']['show_sqk'] = normalizeBoolean($input['labels']['show_sqk'] ?? $settings['labels']['show_sqk']);
+        $settings['labels']['show_labels'] = normalizeBoolean($input['labels']['show_labels'] ?? $settings['labels']['show_labels']);
+        $minZoom = filter_var($input['labels']['min_zoom'] ?? null, FILTER_VALIDATE_INT);
+        if ($minZoom !== false && $minZoom >= 3 && $minZoom <= 14) {
+            $settings['labels']['min_zoom'] = (int)$minZoom;
+        }
         $fontSize = filter_var($input['labels']['font_size'] ?? null, FILTER_VALIDATE_INT);
         if ($fontSize !== false && $fontSize >= 8 && $fontSize <= 24) {
             $settings['labels']['font_size'] = (int)$fontSize;
@@ -145,6 +161,29 @@ function normalizeSettings(array $input, array $defaults): array
             $input['labels']['color'] ?? '',
             $settings['labels']['color']
         );
+    }
+
+    if (isset($input['display']) && is_array($input['display'])) {
+        $basemap = strtolower(trim((string)($input['display']['basemap'] ?? $settings['display']['basemap'])));
+        if (in_array($basemap, ['dark', 'light'], true)) {
+            $settings['display']['basemap'] = $basemap;
+        }
+    }
+
+    if (isset($input['navpoints']) && is_array($input['navpoints'])) {
+        $settings['navpoints']['enabled'] = normalizeBoolean($input['navpoints']['enabled'] ?? $settings['navpoints']['enabled']);
+        $minZoom = filter_var($input['navpoints']['min_zoom'] ?? null, FILTER_VALIDATE_INT);
+        if ($minZoom !== false && $minZoom >= 3 && $minZoom <= 14) {
+            $settings['navpoints']['min_zoom'] = (int)$minZoom;
+        }
+        $zone = strtolower(trim((string)($input['navpoints']['zone'] ?? $settings['navpoints']['zone'])));
+        if (in_array($zone, ['all', 'nw', 'mmtj-120'], true)) {
+            $settings['navpoints']['zone'] = $zone;
+        }
+        $maxPoints = filter_var($input['navpoints']['max_points'] ?? null, FILTER_VALIDATE_INT);
+        if ($maxPoints !== false && $maxPoints >= 250 && $maxPoints <= 5000) {
+            $settings['navpoints']['max_points'] = (int)$maxPoints;
+        }
     }
 
     if (isset($input['category_styles']) && is_array($input['category_styles'])) {
