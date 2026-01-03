@@ -141,6 +141,13 @@ function parseCoordinatePair(string $pair): ?array
  */
 function writeGeoJSON(string $name, array $features, string $outputDir): void
 {
+    foreach ($features as &$feature) {
+        if (!isset($feature['geometry']['coordinates'])) {
+            continue;
+        }
+        $feature['geometry']['coordinates'] = normalizeCoordinates($feature['geometry']['coordinates']);
+    }
+    unset($feature);
     $geojson = [
         'type' => 'FeatureCollection',
         'features' => $features,
@@ -148,6 +155,37 @@ function writeGeoJSON(string $name, array $features, string $outputDir): void
     $path = $outputDir . '/' . $name . '.geojson';
     file_put_contents($path, json_encode($geojson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     echo "Written: $path\n";
+}
+
+/**
+ * Normalize coordinates to valid lat/lon ranges by scaling down
+ * malformed values (e.g., 204.1683 => 20.41683).
+ */
+function normalizeCoordinates($coords)
+{
+    if (!is_array($coords)) {
+        return $coords;
+    }
+    if (count($coords) >= 2 && is_numeric($coords[0]) && is_numeric($coords[1])) {
+        $lon = normalizeDegree((float)$coords[0], 180.0);
+        $lat = normalizeDegree((float)$coords[1], 90.0);
+        return [$lon, $lat];
+    }
+    $normalized = [];
+    foreach ($coords as $item) {
+        $normalized[] = normalizeCoordinates($item);
+    }
+    return $normalized;
+}
+
+function normalizeDegree(float $value, float $limit): float
+{
+    $abs = abs($value);
+    while ($abs > $limit && $abs <= ($limit * 10)) {
+        $value /= 10;
+        $abs = abs($value);
+    }
+    return $value;
 }
 
 /**

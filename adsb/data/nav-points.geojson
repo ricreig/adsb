@@ -1,15 +1,33 @@
 {
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "properties": { "name": "TIJ VOR", "type": "navaid" },
-      "geometry": { "type": "Point", "coordinates": [ -117.014, 32.541 ] }
-    },
-    {
-      "type": "Feature",
-      "properties": { "name": "MMTJ", "type": "airport" },
-      "geometry": { "type": "Point", "coordinates": [ -116.9700, 32.5410 ] }
-    }
-  ]
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "TIJ VOR",
+                "type": "navaid"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -117.014,
+                    32.541
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "MMTJ",
+                "type": "airport"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -116.97,
+                    32.541
+                ]
+            }
+        }
+    ]
 }
