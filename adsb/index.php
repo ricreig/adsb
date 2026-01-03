@@ -10,6 +10,10 @@
 
 // Load configuration
 $config = require __DIR__ . '/config.php';
+$base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+if ($base === '/') {
+    $base = '';
+}
 
 // Discover available GeoJSON layers.  Each file in the configured
 // directory becomes an entry in the layers list.  Files should be
@@ -180,6 +184,7 @@ if (is_dir($geojsonDir)) {
 <body>
     <div id="map"></div>
     <div id="tileStatus">Basemap fallback activated.</div>
+    <div id="feedError" style="display:none;position:absolute;top:10px;right:340px;background:#b03a2e;color:#fff;padding:6px 10px;border-radius:4px;z-index:1000;max-width:360px;"></div>
     <div id="sidebar">
         <h2>Airspace Layers</h2>
         <div id="layerControls"></div>
@@ -203,6 +208,9 @@ if (is_dir($geojsonDir)) {
             </label>
             <label style="display:block;margin-bottom:4px;">Radius (NM, max 250)
                 <input type="number" id="radiusInput" min="1" max="250" value="250" style="width:80px;margin-left:4px;"/>
+            </label>
+            <label style="display:block;margin-bottom:4px;">Polling Interval (ms)
+                <input type="number" id="pollIntervalInput" min="500" max="5000" value="1500" style="width:80px;margin-left:4px;"/>
             </label>
             <label style="display:block;margin-bottom:4px;">Range Rings (NM, comma‑sep)
                 <input type="text" id="ringDistances" value="50,100,150,200,250" style="width:120px;margin-left:4px;"/>
@@ -263,6 +271,16 @@ if (is_dir($geojsonDir)) {
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o1w/X8WdUNwH5tXbSb5Cqx630DGm9LdlVNV4cCZmZyQ=" crossorigin=""></script>
     <script>
+    window.ADSB_BASE = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
+    const BASE_URL = window.ADSB_BASE || '';
+    function buildUrl(path) {
+        const cleanPath = path.replace(/^\/+/, '');
+        if (!BASE_URL) {
+            return cleanPath;
+        }
+        return BASE_URL + '/' + cleanPath;
+    }
+
     // PHP passes the list of available GeoJSON layers as JSON here.
     const geojsonLayers = <?php echo json_encode($layerFiles, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES); ?>;
 
@@ -346,7 +364,7 @@ if (is_dir($geojsonDir)) {
             map.addLayer(overlays[id]);
             return;
         }
-        const url = geojsonLayers[id];
+        const url = buildUrl(geojsonLayers[id]);
         fetch(url)
             .then(resp => resp.json())
             .then(data => {
@@ -383,6 +401,7 @@ if (is_dir($geojsonDir)) {
     const stripTray = document.getElementById('stripTray');
     const flightInfoDiv = document.getElementById('flightInfo');
     const notif = document.getElementById('notif');
+    const feedError = document.getElementById('feedError');
 
     const defaultSettings = {
         airport: {
@@ -391,6 +410,7 @@ if (is_dir($geojsonDir)) {
             lon: <?php echo (float)$config['airport']['lon']; ?>,
         },
         radius_nm: 250,
+        poll_interval_ms: <?php echo (int)$config['poll_interval_ms']; ?>,
         rings: {
             distances: [50, 100, 150, 200, 250],
             style: {
@@ -667,7 +687,7 @@ if (is_dir($geojsonDir)) {
         // Example: load a GeoJSON representing the flight plan by callsign.
         // The file should be located under data/routes/{callsign}.geojson.
         const callsign = ac.flight.trim();
-        const url = 'data/routes/' + callsign + '.geojson';
+        const url = buildUrl('data/routes/' + callsign + '.geojson');
         fetch(url)
             .then(resp => resp.json())
             .then(gjson => {
@@ -690,13 +710,30 @@ if (is_dir($geojsonDir)) {
         }, 3000);
     }
 
+    function showFeedError(message) {
+        if (message) {
+            feedError.textContent = message;
+            feedError.style.display = 'block';
+        } else {
+            feedError.style.display = 'none';
+        }
+    }
+
     // Poll feed.php for live data
     function pollFeed() {
+        if (document.hidden) {
+            return;
+        }
         const radius = Math.min(250, settings.radius_nm || 250);
-        const url = 'feed.php?lat=' + encodeURIComponent(settings.airport.lat) + '&lon=' + encodeURIComponent(settings.airport.lon) + '&radius=' + encodeURIComponent(radius);
+        const url = buildUrl('feed.php') + '?lat=' + encodeURIComponent(settings.airport.lat) + '&lon=' + encodeURIComponent(settings.airport.lon) + '&radius_nm=' + encodeURIComponent(radius);
         fetch(url)
             .then(resp => resp.json())
             .then(data => {
+                if (!data.ok) {
+                    showFeedError(data.error || 'Upstream feed unavailable.');
+                } else {
+                    showFeedError('');
+                }
                 const seen = new Set();
                 (data.ac || []).forEach(ac => {
                     flights[ac.hex] = ac;
@@ -708,17 +745,19 @@ if (is_dir($geojsonDir)) {
             })
             .catch(err => {
                 console.error('Error fetching feed:', err);
-                showNotification('Feed error – check console');
+                showFeedError('Feed error – check console.');
             });
     }
 
     let pollTimer = null;
     function startPolling() {
         if (pollTimer) {
-            return;
+            clearInterval(pollTimer);
+            pollTimer = null;
         }
         pollFeed();
-        pollTimer = setInterval(pollFeed, 5000);
+        const interval = Math.max(500, settings.poll_interval_ms || 1500);
+        pollTimer = setInterval(pollFeed, interval);
     }
 
     // Settings panel toggling
@@ -735,6 +774,7 @@ if (is_dir($geojsonDir)) {
         document.getElementById('airportLatInput').value = settings.airport.lat;
         document.getElementById('airportLonInput').value = settings.airport.lon;
         document.getElementById('radiusInput').value = settings.radius_nm;
+        document.getElementById('pollIntervalInput').value = settings.poll_interval_ms;
         document.getElementById('ringDistances').value = settings.rings.distances.join(',');
         document.getElementById('ringColour').value = settings.rings.style.color;
         document.getElementById('ringWeight').value = settings.rings.style.weight;
@@ -755,6 +795,8 @@ if (is_dir($geojsonDir)) {
         settings.airport.lon = parseFloat(document.getElementById('airportLonInput').value);
         const radiusVal = parseFloat(document.getElementById('radiusInput').value);
         settings.radius_nm = isNaN(radiusVal) ? settings.radius_nm : Math.min(250, Math.max(1, radiusVal));
+        const pollVal = parseInt(document.getElementById('pollIntervalInput').value, 10);
+        settings.poll_interval_ms = isNaN(pollVal) ? settings.poll_interval_ms : Math.min(5000, Math.max(500, pollVal));
         const rd = document.getElementById('ringDistances').value.split(',').map(x => parseFloat(x));
         settings.rings.distances = rd.filter(x => !isNaN(x) && x > 0);
         settings.rings.style.color = document.getElementById('ringColour').value;
@@ -771,7 +813,7 @@ if (is_dir($geojsonDir)) {
     });
 
     function saveSettings() {
-        fetch('api/settings.php', {
+        fetch(buildUrl('api/settings.php'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -784,6 +826,7 @@ if (is_dir($geojsonDir)) {
                     settings = data.settings;
                     airacUpdateEnabled = !!data.airac_update_enabled;
                     applySettings();
+                    startPolling();
                     settingsPanel.style.display = 'none';
                     settingsToggle.textContent = 'Open Settings';
                     showNotification('Settings saved');
@@ -795,7 +838,7 @@ if (is_dir($geojsonDir)) {
     }
 
     function loadSettings() {
-        fetch('api/settings.php')
+        fetch(buildUrl('api/settings.php'))
             .then(resp => resp.json())
             .then(data => {
                 if (data.settings) {
@@ -818,7 +861,7 @@ if (is_dir($geojsonDir)) {
         airacSpinner.style.display = 'inline-block';
         airacConsole.style.display = 'block';
         airacConsole.textContent = 'Running AIRAC update...';
-        fetch('api/admin/airac_update.php', { method: 'POST' })
+        fetch(buildUrl('api/admin/airac_update.php'), { method: 'POST' })
             .then(resp => resp.json())
             .then(data => {
                 const output = [
