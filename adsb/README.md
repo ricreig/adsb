@@ -23,7 +23,7 @@ Abre `http://127.0.0.1:8000/health.php` (o tu ruta equivalente en producción) p
 - Permisos de escritura para `data/`, `data/cache/` y `data/adsb.sqlite` en `writable`.
 - Hora del servidor (`now`).
 
-Si aparece “L undefined” en móviles, revisa el overlay superior: ahora intenta cargar Leaflet desde CDN y fallback local (`assets/vendor/leaflet/`).
+Si aparece “L undefined” en móviles, revisa el overlay superior: ahora intenta cargar Leaflet desde CDN y usa fallback local en `assets/vendor/leaflet/` si el CDN falla.
 
 ### Feed robusto (cache + rate limit)
 El feed (`feed.php`) aplica cache de archivo en `data/cache/` con TTL de 1.5s y rate limit global de 1 req/s al upstream (`airplanes.live`). Campos clave del JSON:

@@ -41,8 +41,15 @@ if (is_dir($geojsonDir)) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Mexican Airspace Display</title>
-    <!-- Leaflet CSS (local copy for reliability) -->
-    <link rel="stylesheet" href="<?php echo htmlspecialchars($base . '/assets/vendor/leaflet/leaflet.css'); ?>" />
+    <!-- Leaflet CSS: CDN primary + local fallback -->
+    <link
+        id="leaflet-css"
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-D4o8gbzKmClWazdh7szkT1gG5b6yoZn6g8hmrmMcvm8="
+        crossorigin="anonymous"
+        onerror="this.onerror=null;this.href='<?php echo htmlspecialchars($base . '/assets/vendor/leaflet/leaflet.css'); ?>';"
+    />
     <style>
         html, body {
             height: 100%;
@@ -343,10 +350,16 @@ if (is_dir($geojsonDir)) {
         });
     }
 
-    function loadScript(url) {
+    function loadScript(url, options = {}) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = url;
+            if (options.integrity) {
+                script.integrity = options.integrity;
+            }
+            if (options.crossorigin) {
+                script.crossOrigin = options.crossorigin;
+            }
             script.async = true;
             script.onload = () => resolve(url);
             script.onerror = () => reject(new Error(`Failed to load ${url}`));
@@ -356,16 +369,25 @@ if (is_dir($geojsonDir)) {
 
     async function loadLeaflet() {
         const urls = [
-            'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-            'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
-            buildUrl('assets/vendor/leaflet/leaflet.js'),
+            {
+                url: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+                integrity: 'sha256-o1w/X8WdUNwH5tXbSb5Cqx630DGm9LdlVNV4cCZmZyQ=',
+                crossorigin: 'anonymous',
+            },
+            {
+                url: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+            },
+            {
+                url: buildUrl('assets/vendor/leaflet/leaflet.js'),
+            },
         ];
         const attempted = [];
         const failures = [];
-        for (const url of urls) {
+        for (const entry of urls) {
+            const url = entry.url;
             attempted.push(url);
             try {
-                await loadScript(url);
+                await loadScript(url, entry);
                 if (window.L) {
                     return { loaded: true, url, attempted };
                 }
@@ -999,7 +1021,10 @@ if (is_dir($geojsonDir)) {
                 'Tried URLs:',
                 ...result.attempted.map(url => `- ${url}`),
                 '',
-                'Tip: likely blocked CDN or SRI mismatch; SRI removed; check network.',
+                'Failures:',
+                ...result.failures.map(err => `- ${err}`),
+                '',
+                'Tip: likely blocked CDN or SRI mismatch; check network or local assets.',
             ];
             reportError('Leaflet failed to load (L undefined)', detailLines.join('\n'));
             return;
