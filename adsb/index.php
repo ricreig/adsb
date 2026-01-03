@@ -41,8 +41,15 @@ if (is_dir($geojsonDir)) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Mexican Airspace Display</title>
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-D4o8gbzKmClWazdh7szkT1gG5b6yoZn6g8hmrmMcvm8=" crossorigin="" />
+    <!-- Leaflet CSS: CDN primary + local fallback -->
+    <link
+        id="leaflet-css"
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-D4o8gbzKmClWazdh7szkT1gG5b6yoZn6g8hmrmMcvm8="
+        crossorigin="anonymous"
+        onerror="this.onerror=null;this.href='<?php echo htmlspecialchars($base . '/assets/vendor/leaflet/leaflet.css'); ?>';"
+    />
     <style>
         html, body {
             height: 100%;
@@ -284,8 +291,6 @@ if (is_dir($geojsonDir)) {
         </div>
     </div>
     <div id="notif"></div>
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o1w/X8WdUNwH5tXbSb5Cqx630DGm9LdlVNV4cCZmZyQ=" crossorigin=""></script>
     <script>
     window.ADSB_BASE_PATH = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
     window.ADSB_BASE = <?php echo json_encode($base, JSON_UNESCAPED_SLASHES); ?>;
@@ -345,6 +350,67 @@ if (is_dir($geojsonDir)) {
         });
     }
 
+    function loadScript(url, options = {}) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = url;
+            if (options.integrity) {
+                script.integrity = options.integrity;
+            }
+            if (options.crossorigin) {
+                script.crossOrigin = options.crossorigin;
+            }
+            script.async = true;
+            script.onload = () => resolve(url);
+            script.onerror = () => reject(new Error(`Failed to load ${url}`));
+            document.head.appendChild(script);
+        });
+    }
+
+    async function loadLeaflet() {
+        const urls = [
+            {
+                url: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+                integrity: 'sha256-o1w/X8WdUNwH5tXbSb5Cqx630DGm9LdlVNV4cCZmZyQ=',
+                crossorigin: 'anonymous',
+            },
+            {
+                url: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+            },
+            {
+                url: buildUrl('assets/vendor/leaflet/leaflet.js'),
+            },
+        ];
+        const attempted = [];
+        const failures = [];
+        for (const entry of urls) {
+            const url = entry.url;
+            attempted.push(url);
+            try {
+                await loadScript(url, entry);
+                if (window.L) {
+                    return { loaded: true, url, attempted };
+                }
+                failures.push(`${url} (loaded but L undefined)`);
+            } catch (err) {
+                failures.push(`${url} (${err.message || 'load failed'})`);
+            }
+        }
+        return { loaded: false, attempted, failures };
+    }
+
+    function checkHealth() {
+        const url = buildUrl('health.php');
+        fetchJson(url, {}, `Health check (${url})`)
+            .then(data => {
+                if (!data || data.status !== 'ok') {
+                    reportError('Health check reported degraded status', JSON.stringify(data, null, 2));
+                }
+            })
+            .catch(() => {});
+    }
+
+    function initLeafletApp() {
     // Create the map
     const map = L.map('map', {
         zoomControl: true,
@@ -426,7 +492,7 @@ if (is_dir($geojsonDir)) {
             return;
         }
         const url = buildUrl(geojsonLayers[id]);
-        fetchJson(url, {}, `GeoJSON layer ${id}`)
+        fetchJson(url, {}, `GeoJSON layer ${id} (${url})`)
             .then(data => {
                 const layer = L.geoJSON(data, {
                     style: feature => {
@@ -943,6 +1009,28 @@ if (is_dir($geojsonDir)) {
     });
 
     loadSettings();
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        checkHealth();
+        const result = await loadLeaflet();
+        if (!result.loaded || !window.L) {
+            const detailLines = [
+                'Leaflet failed to load (L undefined).',
+                '',
+                'Tried URLs:',
+                ...result.attempted.map(url => `- ${url}`),
+                '',
+                'Failures:',
+                ...result.failures.map(err => `- ${err}`),
+                '',
+                'Tip: likely blocked CDN or SRI mismatch; check network or local assets.',
+            ];
+            reportError('Leaflet failed to load (L undefined)', detailLines.join('\n'));
+            return;
+        }
+        initLeafletApp();
+    });
     </script>
 </body>
 </html>
