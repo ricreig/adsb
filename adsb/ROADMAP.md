@@ -8,7 +8,7 @@ Entregar un radar ATC web end-to-end funcional siguiendo el orden de PRs acordad
 ### PR1 — ISO 6709 + validate_geojson + catalog.json (P0)
 - Implementar parser ISO 6709 robusto en `update_airspace.php`.
 - Regenerar GeoJSON y generar `data/catalog.json` con bbox y conteos.
-- `scripts/validate_geojson.*` debe pasar con `out_of_range = 0`.
+- `scripts/validate_geojson.php` debe pasar con `out_of_range = 0`.
 
 **Dependencias:** ninguna.
 
