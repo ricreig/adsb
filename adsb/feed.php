@@ -12,7 +12,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 $config = require __DIR__ . '/config.php';
 
-$cacheDir = __DIR__ . '/data/cache';
+$cacheDir = $config['feed_cache_dir'] ?? (__DIR__ . '/data/cache');
 if (!is_dir($cacheDir)) {
     mkdir($cacheDir, 0775, true);
 }
@@ -146,6 +146,17 @@ function allowUpstreamRequest(string $lockFile, float $limitSeconds): bool
     return true;
 }
 
+function acquireUpstreamSlot(string $lockFile, float $limitSeconds, int $waitMs): bool
+{
+    if (allowUpstreamRequest($lockFile, $limitSeconds)) {
+        return true;
+    }
+    if ($waitMs > 0) {
+        usleep($waitMs * 1000);
+    }
+    return allowUpstreamRequest($lockFile, $limitSeconds);
+}
+
 function loadGeojsonPolygons(string $path): array
 {
     if (!is_file($path)) {
@@ -270,6 +281,17 @@ function updateLastUpstreamStatus(string $path, ?int $status, ?string $error): v
     writeCacheFile($path, $payload);
 }
 
+function haversineNm(float $lat1, float $lon1, float $lat2, float $lon2): float
+{
+    $R = 6371.0;
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLon = deg2rad($lon2 - $lon1);
+    $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2;
+    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+    $km = $R * $c;
+    return $km / 1.852;
+}
+
 $lat = filter_input(INPUT_GET, 'lat', FILTER_VALIDATE_FLOAT);
 $lon = filter_input(INPUT_GET, 'lon', FILTER_VALIDATE_FLOAT);
 $radius = filter_input(INPUT_GET, 'radius_nm', FILTER_VALIDATE_FLOAT);
@@ -285,6 +307,7 @@ if ($radius <= 0 || $radius > 250) {
 }
 
 $cacheTtlMs = (int)($config['feed_cache_ttl_ms'] ?? 1500);
+$cacheMaxStaleMs = (int)($config['feed_cache_max_stale_ms'] ?? 5000);
 $rateLimitS = (float)($config['feed_rate_limit_s'] ?? 1.0);
 
 $cacheKey = 'adsb_feed_' . md5(sprintf('%.4f|%.4f|%.1f', $lat, $lon, $radius));
@@ -300,27 +323,43 @@ if ($cached !== null) {
         'error' => null,
         'upstream_http' => null,
         'cache_hit' => true,
+        'cache_stale' => false,
         'age_ms' => $ageMs ?? 0,
-        'now' => time(),
+        'now' => date('c'),
         'total' => $cached['total'] ?? count($cached['ac'] ?? []),
         'ac' => $cached['ac'] ?? [],
     ]);
 }
 
 $lockFile = $cacheDir . '/upstream.lock';
-$canRequestUpstream = allowUpstreamRequest($lockFile, $rateLimitS);
+$canRequestUpstream = acquireUpstreamSlot($lockFile, $rateLimitS, 200);
 if (!$canRequestUpstream) {
     $fallbackAc = $stalePayload['ac'] ?? [];
     $fallbackTotal = $stalePayload['total'] ?? count($fallbackAc);
+    $staleAge = $ageMs ?? $cacheMaxStaleMs + 1;
+    if ($stalePayload && $staleAge <= $cacheMaxStaleMs) {
+        respond([
+            'ok' => true,
+            'error' => 'Upstream rate limit active. Serving cached data.',
+            'upstream_http' => null,
+            'cache_hit' => true,
+            'cache_stale' => true,
+            'age_ms' => $ageMs ?? 0,
+            'now' => date('c'),
+            'total' => $fallbackTotal,
+            'ac' => $fallbackAc,
+        ], 200);
+    }
     respond([
         'ok' => false,
-        'error' => 'Upstream rate limit active. Serving cached data if available.',
+        'error' => 'Upstream rate limit active and cache is stale.',
         'upstream_http' => null,
-        'cache_hit' => $stalePayload !== null,
+        'cache_hit' => false,
+        'cache_stale' => true,
         'age_ms' => $ageMs ?? 0,
-        'now' => time(),
-        'total' => $fallbackTotal,
-        'ac' => $fallbackAc,
+        'now' => date('c'),
+        'total' => 0,
+        'ac' => [],
     ], 200);
 }
 
@@ -351,15 +390,29 @@ if ($response === false) {
     updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, 'Upstream request failed');
     $fallbackAc = $stalePayload['ac'] ?? [];
     $fallbackTotal = $stalePayload['total'] ?? count($fallbackAc);
+    if ($stalePayload) {
+        respond([
+            'ok' => true,
+            'error' => 'Upstream unavailable. Serving cached data.',
+            'upstream_http' => $upstreamStatus,
+            'cache_hit' => true,
+            'cache_stale' => true,
+            'age_ms' => $ageMs ?? 0,
+            'now' => date('c'),
+            'total' => $fallbackTotal,
+            'ac' => $fallbackAc,
+        ], 200);
+    }
     respond([
         'ok' => false,
         'error' => 'Unable to retrieve ADS-B data.',
         'upstream_http' => $upstreamStatus,
-        'cache_hit' => $stalePayload !== null,
+        'cache_hit' => false,
+        'cache_stale' => false,
         'age_ms' => $ageMs ?? 0,
-        'now' => time(),
-        'total' => $fallbackTotal,
-        'ac' => $fallbackAc,
+        'now' => date('c'),
+        'total' => 0,
+        'ac' => [],
     ], 200);
 }
 
@@ -384,6 +437,10 @@ $firPolygons = loadGeojsonPolygons(__DIR__ . '/data/fir-limits.geojson');
 $mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
 
 $filtered = [];
+$airportLat = (float)$config['airport']['lat'];
+$airportLon = (float)$config['airport']['lon'];
+$borderLat = (float)($config['border_lat'] ?? 0.0);
+$northBufferNm = (float)($config['north_buffer_nm'] ?? 10.0);
 foreach ($data['ac'] as $ac) {
     if (!isset($ac['lat'], $ac['lon'])) {
         continue;
@@ -401,6 +458,11 @@ foreach ($data['ac'] as $ac) {
                 continue;
             }
         }
+    } elseif ($borderLat > 0.0) {
+        $northLimit = $borderLat + ($northBufferNm / 60.0);
+        if ($acLat > $northLimit) {
+            continue;
+        }
     }
 
     $hex = strtoupper(trim((string)($ac['hex'] ?? '')));
@@ -408,6 +470,7 @@ foreach ($data['ac'] as $ac) {
         continue;
     }
     $flight = strtoupper(trim((string)($ac['flight'] ?? '')));
+    $flight = $flight !== '' ? $flight : null;
     $alt = $ac['alt_baro'] ?? $ac['alt_geom'] ?? null;
     $alt = is_numeric($alt) ? (int)$alt : null;
     $gs = $ac['gs'] ?? null;
@@ -416,26 +479,41 @@ foreach ($data['ac'] as $ac) {
     $track = is_numeric($track) ? (int)round($track) : null;
     $baroRate = $ac['baro_rate'] ?? null;
     $geomRate = $ac['geom_rate'] ?? null;
+    $squawk = strtoupper(trim((string)($ac['squawk'] ?? '')));
+    $squawk = $squawk !== '' ? $squawk : null;
+    $emergency = $ac['emergency'] ?? null;
+    if (is_string($emergency)) {
+        $emergency = strtolower(trim($emergency));
+        if ($emergency === '' || $emergency === 'none') {
+            $emergency = null;
+        }
+    }
+    $distanceNm = haversineNm($acLat, $acLon, $airportLat, $airportLon);
 
     $filtered[] = [
         'hex' => $hex,
         'flight' => $flight,
-        'reg' => $ac['r'] ?? '',
-        'type' => $ac['t'] ?? '',
+        'reg' => isset($ac['r']) && trim((string)$ac['r']) !== '' ? strtoupper(trim((string)$ac['r'])) : null,
+        'type' => isset($ac['t']) && trim((string)$ac['t']) !== '' ? strtoupper(trim((string)$ac['t'])) : null,
         'lat' => $acLat,
         'lon' => $acLon,
         'alt' => $alt,
         'gs' => $gs,
         'track' => $track,
-        'squawk' => $ac['squawk'] ?? null,
-        'emergency' => $ac['emergency'] ?? null,
+        'squawk' => $squawk,
+        'emergency' => $emergency,
         'baro_rate' => is_numeric($baroRate) ? (int)$baroRate : null,
         'geom_rate' => is_numeric($geomRate) ? (int)$geomRate : null,
-        'seen_pos' => $ac['seen_pos'] ?? null,
-        'dst' => $ac['dst'] ?? null,
-        'dir' => $ac['dir'] ?? null,
+        'seen_pos' => is_numeric($ac['seen_pos'] ?? null) ? (float)$ac['seen_pos'] : null,
+        'dst' => is_numeric($ac['dst'] ?? null) ? (float)$ac['dst'] : null,
+        'dir' => is_numeric($ac['dir'] ?? null) ? (float)$ac['dir'] : null,
+        'distance_nm' => round($distanceNm, 1),
     ];
 }
+
+usort($filtered, function (array $a, array $b): int {
+    return ($a['distance_nm'] ?? 0) <=> ($b['distance_nm'] ?? 0);
+});
 
 $payload = [
     'ac' => $filtered,
@@ -448,8 +526,9 @@ respond([
     'error' => null,
     'upstream_http' => $upstreamStatus,
     'cache_hit' => false,
+    'cache_stale' => false,
     'age_ms' => 0,
-    'now' => time(),
+    'now' => date('c'),
     'total' => $payload['total'],
     'ac' => $payload['ac'],
 ]);
