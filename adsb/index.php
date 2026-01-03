@@ -2047,7 +2047,11 @@ if (is_dir($geojsonDir)) {
                 }
                 lastFeedUpdate = Date.now();
                 pollBackoffIndex = 0;
-                updateFeedStatus('OK', '');
+                if (data.error) {
+                    updateFeedStatus('DEGRADED', data.error);
+                } else {
+                    updateFeedStatus('OK', '');
+                }
                 (data.ac || []).forEach(ac => {
                     const previous = flights[ac.hex] || {};
                     const note = previous.note || noteStore[ac.hex] || ac.note || '';
