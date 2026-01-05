@@ -118,6 +118,17 @@ if (is_dir($geojsonDir)) {
             background: transparent;
             opacity: var(--flight-opacity, 1);
         }
+        .navpoint-icon {
+            background: transparent !important;
+            border: none !important;
+        }
+        .navpoint-triangle {
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 7px solid #ffd166;
+        }
         .flight-icon::after {
             content: '';
             position: absolute;
@@ -895,9 +906,17 @@ if (is_dir($geojsonDir)) {
 
     // Navpoints layer
     const navpointsLayer = L.layerGroup();
-    const navpointRenderer = L.canvas({ padding: 0.5 });
     let navpointsRequest = null;
     let navpointsLastWarning = 0;
+    const navpointColour = '#ffd166';
+    function buildNavpointIcon() {
+        return L.divIcon({
+            className: 'navpoint-icon',
+            html: `<div class="navpoint-triangle" style="border-top-color:${navpointColour}"></div>`,
+            iconSize: [8, 8],
+            iconAnchor: [4, 4],
+        });
+    }
 
     // Create layer controls in the sidebar
     const layerControlsDiv = document.getElementById('layerControls');
@@ -1074,15 +1093,12 @@ if (is_dir($geojsonDir)) {
             .then(data => {
                 navpointsLayer.clearLayers();
                 const normalized = normalizeGeojson(data);
+                const icon = buildNavpointIcon();
                 L.geoJSON(normalized, {
                     pointToLayer: (feature, latlng) => {
-                        return L.circleMarker(latlng, {
-                            radius: 2.5,
-                            color: '#ffd166',
-                            fillColor: '#ffd166',
-                            fillOpacity: 0.9,
-                            weight: 0,
-                            renderer: navpointRenderer,
+                        return L.marker(latlng, {
+                            icon,
+                            pane: 'overlayPane',
                         });
                     },
                     onEachFeature: (feature, layerEl) => {
