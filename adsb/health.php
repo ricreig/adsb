@@ -84,6 +84,9 @@ $cacheStale = null;
 if ($latestCacheAge !== null) {
     $cacheStale = ($latestCacheAge * 1000) > $cacheMaxStaleMs;
 }
+$allowUrlFopen = ini_get('allow_url_fopen');
+$allowUrlFopen = $allowUrlFopen !== false && $allowUrlFopen !== '' && $allowUrlFopen !== '0';
+$curlAvailable = function_exists('curl_init');
 
 $airacLogPath = $dataDir . '/airac_update.log';
 $airacStatus = null;
@@ -137,6 +140,10 @@ echo json_encode([
         'cache_max_stale_ms' => $cacheMaxStaleMs,
         'cache_dir' => $cacheDir,
         'cache_entries' => count($cacheFiles),
+    ],
+    'http_fetch' => [
+        'allow_url_fopen' => $allowUrlFopen,
+        'curl_available' => $curlAvailable,
     ],
     'airac' => [
         'last_update' => $airacStatus,
