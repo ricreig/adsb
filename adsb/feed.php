@@ -12,6 +12,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 $config = require __DIR__ . '/config.php';
 require __DIR__ . '/auth.php';
+require_once __DIR__ . '/feed_helpers.php';
 requireAuth($config);
 
 $cacheDir = $config['feed_cache_dir'] ?? (__DIR__ . '/data/cache');
@@ -170,8 +171,18 @@ function readCache(string $key, string $cacheFile, int $ttlMs, ?array &$stale, ?
     return null;
 }
 
-function writeCache(string $key, string $cacheFile, array $payload): void
+function writeCache(
+    string $key,
+    string $cacheFile,
+    array $payload,
+    int $coordDecimals = 3,
+    int $altThreshold = 100
+): void
 {
+    if (isset($payload['ac']) && is_array($payload['ac'])) {
+        $payload['ac'] = dedupeEntries($payload['ac'], $altThreshold, $coordDecimals);
+        $payload['total'] = count($payload['ac']);
+    }
     $entry = [
         'stored_ms' => nowMs(),
         'payload' => $payload,
@@ -500,6 +511,12 @@ $mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
 
 $filteredByHex = [];
 $unfilteredByHex = [];
+$coordDecimals = (int)($config['coordinate_round_decimals'] ?? 3);
+$altThreshold = (int)($config['altitude_change_threshold_ft'] ?? 100);
+$cacheCleanupThreshold = (float)($config['cache_cleanup_threshold'] ?? 300.0);
+$filterLogger = static function (string $message): void {
+    error_log($message);
+};
 $feedLat = (float)$lat;
 $feedLon = (float)$lon;
 $displayLat = (float)$storedSettings['display_center']['lat'];
@@ -566,15 +583,13 @@ foreach ($data['ac'] as $ac) {
     if (!isset($unfilteredByHex[$hex])) {
         $unfilteredByHex[$hex] = $entry;
     } else {
-        $existing = $unfilteredByHex[$hex];
-        $existingSeen = is_numeric($existing['seen_pos'] ?? null) ? (float)$existing['seen_pos'] : INF;
-        $entrySeen = is_numeric($entry['seen_pos'] ?? null) ? (float)$entry['seen_pos'] : INF;
-        if ($entrySeen < $existingSeen) {
+        if (shouldReplaceEntry($unfilteredByHex[$hex], $entry, $altThreshold, $coordDecimals)) {
             $unfilteredByHex[$hex] = $entry;
         }
     }
 
     if ($useFirFilter && !pointInPolygons($acLat, $acLon, $firPolygons)) {
+        logFilterDiscard($filterLogger, $entry, 'fir_outside');
         continue;
     }
     if ($mexPolygons) {
@@ -582,12 +597,14 @@ foreach ($data['ac'] as $ac) {
         if (!$insideMex) {
             $distNm = distanceToPolygonsNm($acLat, $acLon, $mexPolygons);
             if ($distNm > 10.0) {
+                logFilterDiscard($filterLogger, $entry, 'mex_border_distance');
                 continue;
             }
         }
     } elseif ($borderLat > 0.0) {
         $northLimit = $borderLat + ($northBufferNm / 60.0);
         if ($acLat > $northLimit) {
+            logFilterDiscard($filterLogger, $entry, 'north_border_limit');
             continue;
         }
     }
@@ -596,12 +613,20 @@ foreach ($data['ac'] as $ac) {
         $filteredByHex[$hex] = $entry;
         continue;
     }
-    $existing = $filteredByHex[$hex];
-    $existingSeen = is_numeric($existing['seen_pos'] ?? null) ? (float)$existing['seen_pos'] : INF;
-    $entrySeen = is_numeric($entry['seen_pos'] ?? null) ? (float)$entry['seen_pos'] : INF;
-    if ($entrySeen < $existingSeen) {
+    if (shouldReplaceEntry($filteredByHex[$hex], $entry, $altThreshold, $coordDecimals)) {
         $filteredByHex[$hex] = $entry;
     }
+}
+
+$removedUnfiltered = cleanupStaleEntries($unfilteredByHex, $cacheCleanupThreshold);
+$removedFiltered = cleanupStaleEntries($filteredByHex, $cacheCleanupThreshold);
+if ($removedUnfiltered > 0 || $removedFiltered > 0) {
+    $filterLogger(sprintf(
+        'cache_cleanup removed_unfiltered=%d removed_filtered=%d threshold=%s',
+        $removedUnfiltered,
+        $removedFiltered,
+        $cacheCleanupThreshold
+    ));
 }
 
 $filtered = array_values($filteredByHex);
@@ -617,7 +642,7 @@ $payload = [
     'ac' => $filtered,
     'total' => count($filtered),
 ];
-writeCache($cacheKey, $cacheFile, $payload);
+writeCache($cacheKey, $cacheFile, $payload, $coordDecimals, $altThreshold);
 
 respond([
     'ok' => true,
