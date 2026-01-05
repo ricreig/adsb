@@ -53,6 +53,11 @@ return [
     'feed_rate_limit_s' => 1.0,
     // Cache directory for feed responses and upstream rate limiting.
     'feed_cache_dir' => __DIR__ . '/data/cache',
+    // Purge aircraft entries that have not updated seen_pos within this threshold (seconds).
+    'cache_cleanup_threshold' => 300,
+    // Normalization settings for deduplication comparisons.
+    'coordinate_round_decimals' => 3,
+    'altitude_change_threshold_ft' => 100,
 
     // Hard coded latitude of the US–Mexico border near Tijuana.  Aircraft
     // north of this latitude plus the `north_buffer_nm` (converted to
