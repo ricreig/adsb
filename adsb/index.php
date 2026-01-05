@@ -2693,14 +2693,26 @@ if (is_dir($geojsonDir)) {
     const airacSpinner = document.getElementById('airacSpinner');
     const airacConsole = document.getElementById('airacConsole');
     const sidebarToggle = document.getElementById('sidebarToggle');
-    diagnosticsClose.addEventListener('click', () => {
+    function hideDiagnostics() {
         diagnosticsDismissed = true;
         errorOverlay.style.display = 'none';
-    });
-    feedErrorDetails.addEventListener('click', () => {
+    }
+
+    function showDiagnostics() {
         diagnosticsDismissed = false;
         renderDiagnostics();
         errorOverlay.style.display = 'block';
+    }
+
+    diagnosticsClose.addEventListener('click', () => {
+        hideDiagnostics();
+    });
+    feedErrorDetails.addEventListener('click', () => {
+        if (errorOverlay.style.display === 'block') {
+            hideDiagnostics();
+            return;
+        }
+        showDiagnostics();
     });
 
     function setSidebarCollapsed(collapsed) {
