@@ -326,12 +326,74 @@ function parseFirLimits(string $file): array
 function parseNavData(string $navPath): array
 {
     $features = [];
-    if (!function_exists('yaml_parse_file')) {
-        return $features;
-    }
+    $parseYaml = function (string $path): ?array {
+        if (!is_file($path)) {
+            return null;
+        }
+        if (function_exists('yaml_parse_file')) {
+            $data = yaml_parse_file($path);
+            return is_array($data) ? $data : null;
+        }
+        $lines = file($path, FILE_IGNORE_NEW_LINES);
+        if ($lines === false) {
+            return null;
+        }
+        $result = [];
+        $currentKey = null;
+        $currentIndent = null;
+        foreach ($lines as $line) {
+            if ($line === '' || str_starts_with(trim($line), '#')) {
+                continue;
+            }
+            $indent = strlen($line) - strlen(ltrim($line, ' '));
+            $trimmed = trim($line);
+            if (!str_contains($trimmed, ':')) {
+                continue;
+            }
+            [$rawKey, $rawValue] = array_pad(explode(':', $trimmed, 2), 2, '');
+            $key = trim($rawKey);
+            $value = trim($rawValue);
+            if ($indent === 0) {
+                if ($key === '') {
+                    continue;
+                }
+                $currentKey = $key;
+                $currentIndent = null;
+                $result[$currentKey] = [];
+                if ($value !== '') {
+                    $result[$currentKey] = $value;
+                }
+                continue;
+            }
+            if ($currentKey === null) {
+                continue;
+            }
+            if ($currentIndent === null) {
+                $currentIndent = $indent;
+            }
+            if ($indent < $currentIndent) {
+                continue;
+            }
+            if ($key === '') {
+                continue;
+            }
+            if ($value === '' || $value === '~') {
+                $parsed = null;
+            } elseif (is_numeric($value)) {
+                $parsed = (float)$value;
+            } else {
+                $parsed = trim($value, "\"'");
+            }
+            if (!is_array($result[$currentKey])) {
+                $result[$currentKey] = [];
+            }
+            $result[$currentKey][$key] = $parsed;
+        }
+        return $result;
+    };
     $airportFile = $navPath . '/airports.yaml';
-    if (file_exists($airportFile)) {
-        $airports = yaml_parse_file($airportFile);
+    $airports = $parseYaml($airportFile);
+    if (is_array($airports)) {
         foreach ($airports as $icao => $data) {
             if (!isset($data['lat'], $data['lon'])) {
                 continue;
@@ -350,8 +412,8 @@ function parseNavData(string $navPath): array
         }
     }
     $fixFile = $navPath . '/fixes.yaml';
-    if (file_exists($fixFile)) {
-        $fixes = yaml_parse_file($fixFile);
+    $fixes = $parseYaml($fixFile);
+    if (is_array($fixes)) {
         foreach ($fixes as $name => $data) {
             if (!isset($data['lat'], $data['lon'])) {
                 continue;
@@ -370,8 +432,8 @@ function parseNavData(string $navPath): array
         }
     }
     $navaidFile = $navPath . '/navaids.yaml';
-    if (file_exists($navaidFile)) {
-        $navaids = yaml_parse_file($navaidFile);
+    $navaids = $parseYaml($navaidFile);
+    if (is_array($navaids)) {
         foreach ($navaids as $name => $data) {
             if (!isset($data['lat'], $data['lon'])) {
                 continue;
