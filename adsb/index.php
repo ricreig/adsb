@@ -1341,28 +1341,8 @@ if (is_dir($geojsonDir)) {
     }
 
     function buildAircraftId(ac) {
-        const hex = normalizeIdPart(ac.hex);
-        if (hex) {
-            return hex;
-        }
-        const icao = normalizeIdPart(ac.icao || ac.icao24);
-        const reg = normalizeIdPart(ac.reg || ac.registration || ac.r);
-        const flight = normalizeIdPart(ac.flight);
-        const parts = [icao, reg, flight].filter(Boolean);
-        if (parts.length) {
-            return parts.join('|');
-        }
-        const addr = normalizeIdPart(ac.addr || ac.hexid);
-        if (addr) {
-            return addr;
-        }
-        if (isValidLat(ac.lat) && isValidLon(ac.lon)) {
-            const lat = Number(ac.lat).toFixed(4);
-            const lon = Number(ac.lon).toFixed(4);
-            const alt = Number.isFinite(ac.alt) ? Math.round(ac.alt) : '';
-            return `POS:${lat}|${lon}${alt !== '' ? `|${alt}` : ''}`;
-        }
-        return null;
+        const hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid);
+        return hex || null;
     }
 
     function normalizeCenter(center, fallback) {

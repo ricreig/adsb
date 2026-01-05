@@ -4,23 +4,23 @@
 // referenced here are relative to the root of the project directory.
 
 return [
-    // Geographic coordinates for the reference point of the MMZT ACC core.
+    // Geographic coordinates for the reference point of the Mazatlán center.
     // These are used as the default centre for the display and feed queries.
     'airport' => [
-        'icao' => 'MMZT',
+        'icao' => 'MMMZ',
         // Latitude and longitude of the reference point (decimal degrees).
-        'lat' => 29.8839810,
-        'lon' => -114.0747826,
+        'lat' => 23.1614,
+        'lon' => -106.2658,
     ],
-    // UI center (range rings + BRL/distance calculations) defaults to MMTJ.
+    // UI center (range rings + BRL/distance calculations) defaults to MMMZ.
     'ui_center' => [
-        'lat' => 32.541,
-        'lon' => -116.97,
+        'lat' => 23.1614,
+        'lon' => -106.2658,
     ],
     // Legacy display center (deprecated: use ui_center).
     'display_center' => [
-        'lat' => 32.541,
-        'lon' => -116.97,
+        'lat' => 23.1614,
+        'lon' => -106.2658,
     ],
 
     // Base map tile URLs (no-labels). The primary is preferred; the fallback
@@ -82,6 +82,8 @@ return [
 
     // Settings persistence (SQLite).
     'settings_db' => __DIR__ . '/data/adsb.sqlite',
+    // Increment this value to force defaults (centers/airport) to reset.
+    'settings_version' => 2,
     // Polling interval for the frontend (milliseconds).
     'poll_interval_ms' => 1500,
 

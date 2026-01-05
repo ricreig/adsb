@@ -32,6 +32,7 @@ function loadStoredSettings(array $config): array
             'lon' => (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97),
         ],
         'radius_nm' => (float)$config['adsb_radius'],
+        'defaults_version' => (int)($config['settings_version'] ?? 1),
     ];
     $dbPath = $config['settings_db'] ?? null;
     if (!$dbPath || !is_file($dbPath)) {
@@ -45,6 +46,9 @@ function loadStoredSettings(array $config): array
         if ($row && $row['data']) {
             $decoded = json_decode($row['data'], true);
             if (is_array($decoded)) {
+                if (isset($decoded['defaults_version'])) {
+                    $settings['defaults_version'] = (int)$decoded['defaults_version'];
+                }
                 $feed = $decoded['feed_center'] ?? null;
                 if (!is_array($feed) && isset($decoded['airport']) && is_array($decoded['airport'])) {
                     $feed = $decoded['airport'];
@@ -76,6 +80,20 @@ function loadStoredSettings(array $config): array
         }
     } catch (Throwable $e) {
         return $settings;
+    }
+    return applyDefaultsVersion($settings, $config);
+}
+
+function applyDefaultsVersion(array $settings, array $config): array
+{
+    $currentVersion = (int)($config['settings_version'] ?? 1);
+    $storedVersion = isset($settings['defaults_version']) ? (int)$settings['defaults_version'] : 0;
+    if ($storedVersion < $currentVersion) {
+        $settings['feed_center']['lat'] = (float)$config['airport']['lat'];
+        $settings['feed_center']['lon'] = (float)$config['airport']['lon'];
+        $settings['ui_center']['lat'] = (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541);
+        $settings['ui_center']['lon'] = (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97);
+        $settings['defaults_version'] = $currentVersion;
     }
     return $settings;
 }

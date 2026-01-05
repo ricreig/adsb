@@ -56,6 +56,7 @@ $defaults = [
             'dash' => '',
         ],
     ],
+    'defaults_version' => (int)($config['settings_version'] ?? 1),
 ];
 
 function ensureDatabase(string $dbPath): PDO
@@ -252,6 +253,19 @@ function normalizeSettings(array $input, array $base): array
     return $settings;
 }
 
+function applyDefaultsVersion(array $settings, array $defaults): array
+{
+    $currentVersion = (int)($defaults['defaults_version'] ?? 1);
+    $storedVersion = isset($settings['defaults_version']) ? (int)$settings['defaults_version'] : 0;
+    if ($storedVersion < $currentVersion) {
+        $settings['airport'] = $defaults['airport'];
+        $settings['feed_center'] = $defaults['feed_center'];
+        $settings['ui_center'] = $defaults['ui_center'];
+        $settings['defaults_version'] = $currentVersion;
+    }
+    return $settings;
+}
+
 function respond(array $payload, int $status = 200): void
 {
     http_response_code($status);
@@ -276,8 +290,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
     }
     $settings = normalizeSettings($stored, $defaults);
-    if (!$row) {
-        $stmt = $pdo->prepare('INSERT INTO settings (id, data, updated_at) VALUES (1, :data, :updated_at)');
+    $settings = applyDefaultsVersion($settings, $defaults);
+    if (!$row || ($settings['defaults_version'] ?? 0) !== ($stored['defaults_version'] ?? 0)) {
+        $stmt = $pdo->prepare('INSERT INTO settings (id, data, updated_at) VALUES (1, :data, :updated_at)
+            ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at');
         $stmt->execute([
             ':data' => json_encode($settings, JSON_UNESCAPED_SLASHES),
             ':updated_at' => gmdate('c'),
@@ -307,6 +323,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $current = normalizeSettings($stored, $defaults);
     $settings = normalizeSettings($input, $current);
+    $settings['defaults_version'] = max(
+        (int)($settings['defaults_version'] ?? 0),
+        (int)($defaults['defaults_version'] ?? 1)
+    );
     $stmt = $pdo->prepare('INSERT INTO settings (id, data, updated_at) VALUES (1, :data, :updated_at)
         ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at');
     $stmt->execute([
