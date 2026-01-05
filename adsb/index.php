@@ -2505,6 +2505,8 @@ if (is_dir($geojsonDir)) {
                     : '';
                 updateFeedStatus(feedStatus, warningMessage);
                 const seenHexes = new Set();
+                const now = Date.now();
+                const missingGraceMs = Math.max(6000, (settings.poll_interval_ms || 1500) * 6);
                 (data.ac || []).forEach(ac => {
                     if (!ac || !isValidLat(ac.lat) || !isValidLon(ac.lon)) {
                         return;
@@ -2515,13 +2517,16 @@ if (is_dir($geojsonDir)) {
                     seenHexes.add(ac.hex);
                     const previous = flights[ac.hex] || {};
                     const note = previous.note || noteStore[ac.hex] || stripNotes[ac.hex] || ac.note || '';
-                    flights[ac.hex] = { ...previous, ...ac, note };
+                    flights[ac.hex] = { ...previous, ...ac, note, last_seen: now };
                     renderFlight(flights[ac.hex]);
                     stripDataCache[ac.hex] = flights[ac.hex];
                 });
                 Object.keys(flightMarkers).forEach(hex => {
                     if (!seenHexes.has(hex)) {
-                        removeFlight(hex);
+                        const lastSeen = flights[hex]?.last_seen || flightMarkers[hex]?.lastUpdate || 0;
+                        if (now - lastSeen > missingGraceMs) {
+                            removeFlight(hex);
+                        }
                     }
                 });
                 pruneFlights();

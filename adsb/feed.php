@@ -499,8 +499,9 @@ $firPolygons = loadGeojsonPolygons(__DIR__ . '/data/fir-limits.geojson');
 $mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
 
 $filteredByHex = [];
-$feedLat = (float)$storedSettings['feed_center']['lat'];
-$feedLon = (float)$storedSettings['feed_center']['lon'];
+$unfilteredByHex = [];
+$feedLat = (float)$lat;
+$feedLon = (float)$lon;
 $displayLat = (float)$storedSettings['display_center']['lat'];
 $displayLon = (float)$storedSettings['display_center']['lon'];
 $airportInsideFir = $firPolygons ? pointInPolygons($feedLat, $feedLon, $firPolygons) : false;
@@ -513,24 +514,6 @@ foreach ($data['ac'] as $ac) {
     }
     $acLat = (float)$ac['lat'];
     $acLon = (float)$ac['lon'];
-    if ($useFirFilter && !pointInPolygons($acLat, $acLon, $firPolygons)) {
-        continue;
-    }
-    if ($mexPolygons) {
-        $insideMex = pointInPolygons($acLat, $acLon, $mexPolygons);
-        if (!$insideMex) {
-            $distNm = distanceToPolygonsNm($acLat, $acLon, $mexPolygons);
-            if ($distNm > 10.0) {
-                continue;
-            }
-        }
-    } elseif ($borderLat > 0.0) {
-        $northLimit = $borderLat + ($northBufferNm / 60.0);
-        if ($acLat > $northLimit) {
-            continue;
-        }
-    }
-
     $hex = strtoupper(trim((string)($ac['hex'] ?? '')));
     if ($hex === '') {
         continue;
@@ -580,6 +563,35 @@ foreach ($data['ac'] as $ac) {
         'dir' => is_numeric($ac['dir'] ?? null) ? (float)$ac['dir'] : null,
         'distance_nm' => $distanceRounded,
     ];
+    if (!isset($unfilteredByHex[$hex])) {
+        $unfilteredByHex[$hex] = $entry;
+    } else {
+        $existing = $unfilteredByHex[$hex];
+        $existingSeen = is_numeric($existing['seen_pos'] ?? null) ? (float)$existing['seen_pos'] : INF;
+        $entrySeen = is_numeric($entry['seen_pos'] ?? null) ? (float)$entry['seen_pos'] : INF;
+        if ($entrySeen < $existingSeen) {
+            $unfilteredByHex[$hex] = $entry;
+        }
+    }
+
+    if ($useFirFilter && !pointInPolygons($acLat, $acLon, $firPolygons)) {
+        continue;
+    }
+    if ($mexPolygons) {
+        $insideMex = pointInPolygons($acLat, $acLon, $mexPolygons);
+        if (!$insideMex) {
+            $distNm = distanceToPolygonsNm($acLat, $acLon, $mexPolygons);
+            if ($distNm > 10.0) {
+                continue;
+            }
+        }
+    } elseif ($borderLat > 0.0) {
+        $northLimit = $borderLat + ($northBufferNm / 60.0);
+        if ($acLat > $northLimit) {
+            continue;
+        }
+    }
+
     if (!isset($filteredByHex[$hex])) {
         $filteredByHex[$hex] = $entry;
         continue;
@@ -593,6 +605,9 @@ foreach ($data['ac'] as $ac) {
 }
 
 $filtered = array_values($filteredByHex);
+if (count($filtered) <= 1 && count($unfilteredByHex) > count($filteredByHex)) {
+    $filtered = array_values($unfilteredByHex);
+}
 
 usort($filtered, function (array $a, array $b): int {
     return ($a['distance_nm'] ?? 0) <=> ($b['distance_nm'] ?? 0);
