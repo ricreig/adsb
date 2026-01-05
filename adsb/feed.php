@@ -556,9 +556,9 @@ if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) {
 
 updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, null);
 
-$mexBorderFilterEnabled = (bool)($config['mex_border_filter_enabled'] ?? true);
+$borderFilterEnabled = (bool)($config['mex_border_filter_enabled'] ?? true);
 $mexBorderBufferNm = (float)($config['mex_border_buffer_nm'] ?? 10.0);
-$mexPolygons = $mexBorderFilterEnabled ? loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson') : [];
+$mexPolygons = $borderFilterEnabled ? loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson') : [];
 
 $filteredByHex = [];
 $unfilteredByHex = [];
@@ -640,20 +640,22 @@ foreach ($data['ac'] as $ac) {
         }
     }
 
-    if ($mexPolygons) {
-        $insideMex = pointInPolygons($acLat, $acLon, $mexPolygons);
-        if (!$insideMex) {
-            $distNm = distanceToPolygonsNm($acLat, $acLon, $mexPolygons);
-            if ($distNm > $mexBorderBufferNm) {
-                logFilterDiscard($filterLogger, $entry, 'mex_border_distance');
+    if ($borderFilterEnabled) {
+        if ($mexPolygons) {
+            $insideMex = pointInPolygons($acLat, $acLon, $mexPolygons);
+            if (!$insideMex) {
+                $distNm = distanceToPolygonsNm($acLat, $acLon, $mexPolygons);
+                if ($distNm > $mexBorderBufferNm) {
+                    logFilterDiscard($filterLogger, $entry, 'mex_border_distance');
+                    continue;
+                }
+            }
+        } elseif ($borderLat > 0.0) {
+            $northLimit = $borderLat + ($northBufferNm / 60.0);
+            if ($acLat > $northLimit) {
+                logFilterDiscard($filterLogger, $entry, 'north_border_limit');
                 continue;
             }
-        }
-    } elseif ($borderLat > 0.0) {
-        $northLimit = $borderLat + ($northBufferNm / 60.0);
-        if ($acLat > $northLimit) {
-            logFilterDiscard($filterLogger, $entry, 'north_border_limit');
-            continue;
         }
     }
 
