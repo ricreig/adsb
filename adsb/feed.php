@@ -11,10 +11,53 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 $config = require __DIR__ . '/config.php';
+require __DIR__ . '/auth.php';
+requireAuth($config);
 
 $cacheDir = $config['feed_cache_dir'] ?? (__DIR__ . '/data/cache');
 if (!is_dir($cacheDir)) {
     mkdir($cacheDir, 0775, true);
+}
+
+function loadStoredSettings(array $config): array
+{
+    $settings = [
+        'airport' => [
+            'lat' => (float)$config['airport']['lat'],
+            'lon' => (float)$config['airport']['lon'],
+        ],
+        'radius_nm' => (float)$config['adsb_radius'],
+    ];
+    $dbPath = $config['settings_db'] ?? null;
+    if (!$dbPath || !is_file($dbPath)) {
+        return $settings;
+    }
+    try {
+        $pdo = new PDO('sqlite:' . $dbPath);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $stmt = $pdo->query('SELECT data FROM settings WHERE id = 1');
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row && $row['data']) {
+            $decoded = json_decode($row['data'], true);
+            if (is_array($decoded)) {
+                $lat = filter_var($decoded['airport']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+                $lon = filter_var($decoded['airport']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+                $radius = filter_var($decoded['radius_nm'] ?? null, FILTER_VALIDATE_FLOAT);
+                if ($lat !== false && $lat >= -90 && $lat <= 90) {
+                    $settings['airport']['lat'] = (float)$lat;
+                }
+                if ($lon !== false && $lon >= -180 && $lon <= 180) {
+                    $settings['airport']['lon'] = (float)$lon;
+                }
+                if ($radius !== false && $radius > 0 && $radius <= 250) {
+                    $settings['radius_nm'] = (float)$radius;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        return $settings;
+    }
+    return $settings;
 }
 
 function respond(array $payload, int $status = 200): void
@@ -299,9 +342,10 @@ if ($radius === null || $radius === false) {
     $radius = filter_input(INPUT_GET, 'radius', FILTER_VALIDATE_FLOAT);
 }
 
-$lat = $lat !== false && $lat !== null ? $lat : (float)$config['airport']['lat'];
-$lon = $lon !== false && $lon !== null ? $lon : (float)$config['airport']['lon'];
-$radius = $radius !== false && $radius !== null ? $radius : (float)$config['adsb_radius'];
+$storedSettings = loadStoredSettings($config);
+$lat = $lat !== false && $lat !== null ? $lat : (float)$storedSettings['airport']['lat'];
+$lon = $lon !== false && $lon !== null ? $lon : (float)$storedSettings['airport']['lon'];
+$radius = $radius !== false && $radius !== null ? $radius : (float)$storedSettings['radius_nm'];
 if ($radius <= 0 || $radius > 250) {
     $radius = (float)$config['adsb_radius'];
 }
@@ -437,8 +481,8 @@ $firPolygons = loadGeojsonPolygons(__DIR__ . '/data/fir-limits.geojson');
 $mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
 
 $filteredByHex = [];
-$airportLat = (float)$config['airport']['lat'];
-$airportLon = (float)$config['airport']['lon'];
+$airportLat = (float)$storedSettings['airport']['lat'];
+$airportLon = (float)$storedSettings['airport']['lon'];
 $airportInsideFir = $firPolygons ? pointInPolygons($airportLat, $airportLon, $firPolygons) : false;
 $useFirFilter = $firPolygons && $airportInsideFir;
 $borderLat = (float)($config['border_lat'] ?? 0.0);
