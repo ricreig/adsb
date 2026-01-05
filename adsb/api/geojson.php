@@ -42,6 +42,12 @@ $south = filter_input(INPUT_GET, 'south', FILTER_VALIDATE_FLOAT);
 $east = filter_input(INPUT_GET, 'east', FILTER_VALIDATE_FLOAT);
 $west = filter_input(INPUT_GET, 'west', FILTER_VALIDATE_FLOAT);
 $useBbox = $north !== false && $south !== false && $east !== false && $west !== false;
+$limit = filter_input(INPUT_GET, 'limit', FILTER_VALIDATE_INT);
+if ($limit !== null && $limit !== false) {
+    $limit = max(50, min(5000, $limit));
+} else {
+    $limit = null;
+}
 
 function updateBbox($coords, ?array &$bbox): void
 {
@@ -89,6 +95,32 @@ if ($useBbox && isset($data['features']) && is_array($data['features'])) {
     }
     $data['features'] = $filtered;
 }
+
+$catalogPath = rtrim($config['geojson_dir'], '/\\') . '/catalog.json';
+$catalog = null;
+if (is_file($catalogPath)) {
+    $catalogData = json_decode((string)file_get_contents($catalogPath), true);
+    if (is_array($catalogData)) {
+        $catalog = $catalogData;
+    }
+}
+$layerMeta = $catalog['layers'][$layer] ?? null;
+$totalFeatures = $layerMeta['features'] ?? (isset($data['features']) && is_array($data['features']) ? count($data['features']) : 0);
+
+if ($limit !== null && isset($data['features']) && is_array($data['features'])) {
+    if (count($data['features']) > $limit) {
+        $data['features'] = array_slice($data['features'], 0, $limit);
+    }
+}
+
+$meta = [
+    'layer' => $layer,
+    'total_features' => $totalFeatures,
+    'returned' => isset($data['features']) && is_array($data['features']) ? count($data['features']) : 0,
+    'limit' => $limit,
+    'truncated' => $limit !== null && $totalFeatures > $limit,
+];
+$data['meta'] = $meta;
 
 header('Content-Type: application/geo+json; charset=utf-8');
 header('Cache-Control: no-store');

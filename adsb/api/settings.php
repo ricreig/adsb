@@ -239,6 +239,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
     }
     $settings = normalizeSettings($stored, $defaults);
+    if (!$row) {
+        $stmt = $pdo->prepare('INSERT INTO settings (id, data, updated_at) VALUES (1, :data, :updated_at)');
+        $stmt->execute([
+            ':data' => json_encode($settings, JSON_UNESCAPED_SLASHES),
+            ':updated_at' => gmdate('c'),
+        ]);
+    }
     respond([
         'settings' => $settings,
         'airac_update_enabled' => (bool)$config['airac_update_enabled'],

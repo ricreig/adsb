@@ -2398,12 +2398,18 @@ if (is_dir($geojsonDir)) {
                 }
                 lastFeedUpdate = Date.now();
                 pollBackoffIndex = 0;
-                const upstreamBad = data.upstream_http && Number(data.upstream_http) !== 200;
-                const degraded = Boolean(data.error) || Boolean(data.cache_stale) || upstreamBad;
+                const upstreamBad = data.upstream_http !== null && data.upstream_http !== undefined
+                    && Number(data.upstream_http) !== 200;
+                const feedOk = data.error === null
+                    && data.cache_stale === false
+                    && !upstreamBad;
+                const degraded = !feedOk;
                 const feedStatus = degraded
                     ? (data.cache_stale ? 'DEGRADED (CACHE)' : 'DEGRADED')
                     : 'OK';
-                const warningMessage = data.error || (upstreamBad ? `Upstream HTTP ${data.upstream_http}` : '');
+                const warningMessage = !feedOk
+                    ? (data.error || (upstreamBad ? `Upstream HTTP ${data.upstream_http}` : 'Feed degraded.'))
+                    : '';
                 updateFeedStatus(feedStatus, warningMessage);
                 (data.ac || []).forEach(ac => {
                     const previous = flights[ac.hex] || {};
