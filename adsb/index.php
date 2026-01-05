@@ -603,16 +603,34 @@ if (is_dir($geojsonDir)) {
         return `/${trimmed}/`;
     }
     const ADSB_BASE = normalizeBasePath(window.ADSB_BASE || window.ADSB_BASE_PATH || '/');
+    const authToken = new URLSearchParams(window.location.search).get('token');
+    function appendAuthToken(url) {
+        if (!authToken) {
+            return url;
+        }
+        try {
+            const parsed = new URL(url, window.location.origin);
+            if (parsed.origin !== window.location.origin) {
+                return url;
+            }
+            if (!parsed.searchParams.has('token')) {
+                parsed.searchParams.append('token', authToken);
+            }
+            return parsed.toString();
+        } catch (err) {
+            return url;
+        }
+    }
     window.ADSB_BASE = ADSB_BASE;
     function buildUrl(path) {
         if (!path) {
-            return location.origin + ADSB_BASE;
+            return appendAuthToken(location.origin + ADSB_BASE);
         }
         if (/^https?:\/\//i.test(path)) {
-            return path;
+            return appendAuthToken(path);
         }
         const cleanPath = path.replace(/^\/+/, '');
-        return `${location.origin}${ADSB_BASE}${cleanPath}`;
+        return appendAuthToken(`${location.origin}${ADSB_BASE}${cleanPath}`);
     }
     function apiUrl(path) {
         const cleanPath = path.replace(/^\/+/, '');
