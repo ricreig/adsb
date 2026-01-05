@@ -439,6 +439,8 @@ $mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
 $filtered = [];
 $airportLat = (float)$config['airport']['lat'];
 $airportLon = (float)$config['airport']['lon'];
+$airportInsideFir = $firPolygons ? pointInPolygons($airportLat, $airportLon, $firPolygons) : false;
+$useFirFilter = $firPolygons && $airportInsideFir;
 $borderLat = (float)($config['border_lat'] ?? 0.0);
 $northBufferNm = (float)($config['north_buffer_nm'] ?? 10.0);
 foreach ($data['ac'] as $ac) {
@@ -447,7 +449,7 @@ foreach ($data['ac'] as $ac) {
     }
     $acLat = (float)$ac['lat'];
     $acLon = (float)$ac['lon'];
-    if ($firPolygons && !pointInPolygons($acLat, $acLon, $firPolygons)) {
+    if ($useFirFilter && !pointInPolygons($acLat, $acLon, $firPolygons)) {
         continue;
     }
     if ($mexPolygons) {
