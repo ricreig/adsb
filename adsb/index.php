@@ -104,6 +104,31 @@ if (is_dir($geojsonDir)) {
             border-radius: 4px;
             padding: 4px 6px;
         }
+        .flight-marker {
+            background: transparent !important;
+            border: none !important;
+        }
+        .flight-icon {
+            width: 12px;
+            height: 12px;
+            border: 2px solid var(--flight-color, #50fa7b);
+            border-radius: 2px;
+            box-sizing: border-box;
+            position: relative;
+            background: transparent;
+            opacity: var(--flight-opacity, 1);
+        }
+        .flight-icon::after {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--flight-color, #50fa7b);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
         #map {
             position: absolute;
             top: 0;
@@ -428,11 +453,17 @@ if (is_dir($geojsonDir)) {
             <label style="display:block;margin-bottom:4px;">Primary Airport ICAO
                 <input type="text" id="airportInput" value="<?php echo htmlspecialchars($config['airport']['icao']); ?>" style="width:80px;margin-left:4px;"/>
             </label>
-            <label style="display:block;margin-bottom:4px;">Primary Airport Lat
-                <input type="number" id="airportLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['airport']['lat']); ?>" style="width:90px;margin-left:4px;"/>
+            <label style="display:block;margin-bottom:4px;">Feed Center Lat
+                <input type="number" id="feedCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['airport']['lat']); ?>" style="width:90px;margin-left:4px;"/>
             </label>
-            <label style="display:block;margin-bottom:4px;">Primary Airport Lon
-                <input type="number" id="airportLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['airport']['lon']); ?>" style="width:90px;margin-left:4px;"/>
+            <label style="display:block;margin-bottom:4px;">Feed Center Lon
+                <input type="number" id="feedCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['airport']['lon']); ?>" style="width:90px;margin-left:4px;"/>
+            </label>
+            <label style="display:block;margin-bottom:4px;">Display Center Lat
+                <input type="number" id="displayCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['display_center']['lat'] ?? 32.541); ?>" style="width:90px;margin-left:4px;"/>
+            </label>
+            <label style="display:block;margin-bottom:4px;">Display Center Lon
+                <input type="number" id="displayCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['display_center']['lon'] ?? -116.97); ?>" style="width:90px;margin-left:4px;"/>
             </label>
             <label style="display:block;margin-bottom:4px;">Radius (NM, max 250)
                 <input type="number" id="radiusInput" min="1" max="250" value="250" style="width:80px;margin-left:4px;"/>
@@ -760,7 +791,10 @@ if (is_dir($geojsonDir)) {
         zoomControl: true,
         attributionControl: true,
         preferCanvas: true,
-    }).setView([<?php echo $config['airport']['lat']; ?>, <?php echo $config['airport']['lon']; ?>], 8);
+    }).setView([
+        <?php echo (float)($config['display_center']['lat'] ?? 32.541); ?>,
+        <?php echo (float)($config['display_center']['lon'] ?? -116.97); ?>
+    ], 8);
     const tileStatus = document.getElementById('tileStatus');
     map.createPane('tracks');
     map.createPane('targets');
@@ -995,11 +1029,11 @@ if (is_dir($geojsonDir)) {
         };
         if (settings.navpoints.zone === 'mmtj-120') {
             const deltaLat = 120 / 60;
-            const deltaLon = deltaLat / Math.cos(settings.airport.lat * Math.PI / 180);
-            north = Math.min(north, settings.airport.lat + deltaLat);
-            south = Math.max(south, settings.airport.lat - deltaLat);
-            east = Math.min(east, settings.airport.lon + deltaLon);
-            west = Math.max(west, settings.airport.lon - deltaLon);
+            const deltaLon = deltaLat / Math.cos(settings.display_center.lat * Math.PI / 180);
+            north = Math.min(north, settings.display_center.lat + deltaLat);
+            south = Math.max(south, settings.display_center.lat - deltaLat);
+            east = Math.min(east, settings.display_center.lon + deltaLon);
+            west = Math.max(west, settings.display_center.lon - deltaLon);
         } else {
             const zone = zones[settings.navpoints.zone] || zones.all;
             north = Math.min(north, zone.north);
@@ -1110,8 +1144,14 @@ if (is_dir($geojsonDir)) {
     const defaultSettings = {
         airport: {
             icao: '<?php echo addslashes($config['airport']['icao']); ?>',
+        },
+        feed_center: {
             lat: <?php echo (float)$config['airport']['lat']; ?>,
             lon: <?php echo (float)$config['airport']['lon']; ?>,
+        },
+        display_center: {
+            lat: <?php echo (float)($config['display_center']['lat'] ?? 32.541); ?>,
+            lon: <?php echo (float)($config['display_center']['lon'] ?? -116.97); ?>,
         },
         radius_nm: 250,
         poll_interval_ms: <?php echo (int)$config['poll_interval_ms']; ?>,
@@ -1161,9 +1201,10 @@ if (is_dir($geojsonDir)) {
 
     // Apply settings to map and UI
     function applySettings() {
+        ensureCenters();
         document.documentElement.style.setProperty('--label-size', settings.labels.font_size);
         document.documentElement.style.setProperty('--label-color', settings.labels.color);
-        map.setView([settings.airport.lat, settings.airport.lon], map.getZoom());
+        map.setView([settings.display_center.lat, settings.display_center.lon], map.getZoom());
         updateRangeRings();
         switchBasemap(settings.display && settings.display.basemap ? settings.display.basemap : 'dark');
         updateLabelVisibility();
@@ -1177,7 +1218,7 @@ if (is_dir($geojsonDir)) {
         rangeRings = [];
         const dashArray = settings.rings.style.dash || '';
         settings.rings.distances.forEach(dist => {
-            const circle = L.circle([settings.airport.lat, settings.airport.lon], {
+            const circle = L.circle([settings.display_center.lat, settings.display_center.lon], {
                 color: settings.rings.style.color,
                 weight: settings.rings.style.weight,
                 fill: false,
@@ -1240,6 +1281,24 @@ if (is_dir($geojsonDir)) {
 
     function isValidLon(lon) {
         return Number.isFinite(lon) && lon >= -180 && lon <= 180;
+    }
+
+    function normalizeCenter(center, fallback) {
+        if (!center || !isValidLat(center.lat) || !isValidLon(center.lon)) {
+            return { ...fallback };
+        }
+        return { lat: Number(center.lat), lon: Number(center.lon) };
+    }
+
+    function ensureCenters() {
+        settings.feed_center = normalizeCenter(
+            settings.feed_center || settings.airport,
+            defaultSettings.feed_center
+        );
+        settings.display_center = normalizeCenter(
+            settings.display_center,
+            defaultSettings.display_center
+        );
     }
 
     function normalizeLonLat(coord) {
@@ -1555,6 +1614,19 @@ if (is_dir($geojsonDir)) {
         return '#50fa7b';
     }
 
+    function buildFlightIcon(color, opacity = 1) {
+        return L.divIcon({
+            className: 'flight-marker',
+            html: `<div class="flight-icon" style="--flight-color:${color};--flight-opacity:${opacity};"></div>`,
+            iconSize: [12, 12],
+            iconAnchor: [6, 6],
+        });
+    }
+
+    function updateMarkerIcon(marker, color, opacity = 1) {
+        marker.setIcon(buildFlightIcon(color, opacity));
+    }
+
     function shouldShowLabel(ac) {
         if (!settings.labels.show_labels) {
             return false;
@@ -1710,7 +1782,7 @@ if (is_dir($geojsonDir)) {
                 tooltip.options.direction = placement.direction;
                 tooltip.options.offset = placement.offset;
             }
-            existing.marker.setStyle({ color, fillColor: color, opacity: status === 'released' ? 0.6 : 1 });
+            updateMarkerIcon(existing.marker, color, status === 'released' ? 0.6 : 1);
             existing.vector.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
             existing.marker.setTooltipOpacity(shouldShowLabel(ac) ? 1 : 0);
             const history = updateTrackHistory(existing, ac);
@@ -1721,12 +1793,8 @@ if (is_dir($geojsonDir)) {
             updateTooltipClass(existing.marker, ac);
             bindLabelNoteEditor(existing.marker, id);
         } else {
-            const marker = L.circleMarker(pos, {
-                radius: 4,
-                color,
-                fillColor: color,
-                fillOpacity: 1,
-                renderer: targetRenderer,
+            const marker = L.marker(pos, {
+                icon: buildFlightIcon(color),
                 pane: 'targets',
             }).addTo(map);
             const vector = L.polyline([pos, predicted], {
@@ -1806,6 +1874,28 @@ if (is_dir($geojsonDir)) {
         });
     }
 
+    function removeFlight(id) {
+        const state = flightMarkers[id];
+        if (state) {
+            map.removeLayer(state.marker);
+            map.removeLayer(state.vector);
+            if (state.track) {
+                map.removeLayer(state.track);
+            }
+            delete flightMarkers[id];
+        }
+        delete flights[id];
+        if (selectedFlight === id) {
+            selectedFlight = null;
+            flightInfoDiv.textContent = 'Click a flight to see details.';
+            updateFlightPlanPanel(null);
+        }
+        const stripEl = document.querySelector('.strip[data-hex="' + id + '"]');
+        if (stripEl && !stripOrder.includes(id)) {
+            stripEl.remove();
+        }
+    }
+
     // Remove stale flights (not updated recently)
     function pruneFlights() {
         const now = Date.now();
@@ -1817,22 +1907,7 @@ if (is_dir($geojsonDir)) {
             if (now - state.lastUpdate <= 90 * 1000) {
                 return;
             }
-            map.removeLayer(state.marker);
-            map.removeLayer(state.vector);
-            if (state.track) {
-                map.removeLayer(state.track);
-            }
-            delete flightMarkers[id];
-            delete flights[id];
-            if (selectedFlight === id) {
-                selectedFlight = null;
-                flightInfoDiv.textContent = 'Click a flight to see details.';
-            }
-            // Remove from strip tray if not assumed
-            const stripEl = document.querySelector('.strip[data-hex="' + id + '"]');
-            if (stripEl && !stripOrder.includes(id)) {
-                stripEl.remove();
-            }
+            removeFlight(id);
         });
     }
 
@@ -1960,7 +2035,7 @@ if (is_dir($geojsonDir)) {
             const m = flightMarkers[id].marker;
             const status = getFlightStatus(id);
             const color = id === hex ? '#22d3ee' : flightColor(status);
-            m.setStyle({ color, fillColor: color });
+            updateMarkerIcon(m, color, status === 'released' ? 0.6 : 1);
             updateTooltipClass(m, flights[id] || {});
         });
         updateStrips();
@@ -2022,7 +2097,7 @@ if (is_dir($geojsonDir)) {
         const markerData = flightMarkers[hex];
         if (markerData) {
             const color = flightColor('assumed');
-            markerData.marker.setStyle({ color, fillColor: color });
+            updateMarkerIcon(markerData.marker, color);
             markerData.vector.setStyle({ color });
             if (markerData.track) {
                 markerData.track.setStyle({ color });
@@ -2048,7 +2123,7 @@ if (is_dir($geojsonDir)) {
         const markerData = flightMarkers[hex];
         if (markerData) {
             const color = flightColor('released');
-            markerData.marker.setStyle({ color, fillColor: color, opacity: 0.6 });
+            updateMarkerIcon(markerData.marker, color, 0.6);
             markerData.vector.setStyle({ color, opacity: 0.3 });
             if (markerData.track) {
                 markerData.track.setStyle({ color, opacity: 0.3 });
@@ -2276,7 +2351,7 @@ if (is_dir($geojsonDir)) {
                 ensureStripForFlight(selectedFlight);
             }
         } else if (brlMode === 'airport') {
-            brlOrigin = [settings.airport.lat, settings.airport.lon];
+            brlOrigin = [settings.display_center.lat, settings.display_center.lon];
             brlTracking = true;
             showNotification('AP BRL activo: clic para destino (origen aeropuerto).');
             if (selectedFlight) {
@@ -2312,7 +2387,7 @@ if (is_dir($geojsonDir)) {
     });
     brlClear.addEventListener('click', () => {
         clearBrl();
-        brlOrigin = brlMode === 'airport' ? [settings.airport.lat, settings.airport.lon] : null;
+        brlOrigin = brlMode === 'airport' ? [settings.display_center.lat, settings.display_center.lon] : null;
         brlTracking = brlMode === 'airport';
         showNotification('BRL borrado');
     });
@@ -2386,7 +2461,9 @@ if (is_dir($geojsonDir)) {
         }
         pollAbort = new AbortController();
         const radius = Math.min(250, settings.radius_nm || 250);
-        const url = buildUrl('feed.php') + '?lat=' + encodeURIComponent(settings.airport.lat) + '&lon=' + encodeURIComponent(settings.airport.lon) + '&radius_nm=' + encodeURIComponent(radius);
+        const url = buildUrl('feed.php') + '?lat=' + encodeURIComponent(settings.feed_center.lat)
+            + '&lon=' + encodeURIComponent(settings.feed_center.lon)
+            + '&radius_nm=' + encodeURIComponent(radius);
         fetchJson(url, { signal: pollAbort.signal }, 'Feed request')
             .then(data => {
                 if (!data || !data.ok) {
@@ -2398,8 +2475,8 @@ if (is_dir($geojsonDir)) {
                 }
                 lastFeedUpdate = Date.now();
                 pollBackoffIndex = 0;
-                const upstreamBad = data.upstream_http !== null && data.upstream_http !== undefined
-                    && Number(data.upstream_http) !== 200;
+                const hasUpstream = data.upstream_http !== null && data.upstream_http !== undefined;
+                const upstreamBad = hasUpstream && Number(data.upstream_http) !== 200;
                 const feedOk = data.error === null
                     && data.cache_stale === false
                     && !upstreamBad;
@@ -2411,12 +2488,25 @@ if (is_dir($geojsonDir)) {
                     ? (data.error || (upstreamBad ? `Upstream HTTP ${data.upstream_http}` : 'Feed degraded.'))
                     : '';
                 updateFeedStatus(feedStatus, warningMessage);
+                const seenHexes = new Set();
                 (data.ac || []).forEach(ac => {
+                    if (!ac || !isValidLat(ac.lat) || !isValidLon(ac.lon)) {
+                        return;
+                    }
+                    if (!ac.hex) {
+                        return;
+                    }
+                    seenHexes.add(ac.hex);
                     const previous = flights[ac.hex] || {};
                     const note = previous.note || noteStore[ac.hex] || stripNotes[ac.hex] || ac.note || '';
                     flights[ac.hex] = { ...previous, ...ac, note };
                     renderFlight(flights[ac.hex]);
                     stripDataCache[ac.hex] = flights[ac.hex];
+                });
+                Object.keys(flightMarkers).forEach(hex => {
+                    if (!seenHexes.has(hex)) {
+                        removeFlight(hex);
+                    }
                 });
                 pruneFlights();
                 updateStrips();
@@ -2484,8 +2574,10 @@ if (is_dir($geojsonDir)) {
         settingsToggle.textContent = settingsPanel.style.display === 'none' ? 'Open Settings' : 'Close Settings';
         // populate inputs with current settings
         document.getElementById('airportInput').value = settings.airport.icao;
-        document.getElementById('airportLatInput').value = settings.airport.lat;
-        document.getElementById('airportLonInput').value = settings.airport.lon;
+        document.getElementById('feedCenterLatInput').value = settings.feed_center.lat;
+        document.getElementById('feedCenterLonInput').value = settings.feed_center.lon;
+        document.getElementById('displayCenterLatInput').value = settings.display_center.lat;
+        document.getElementById('displayCenterLonInput').value = settings.display_center.lon;
         document.getElementById('radiusInput').value = settings.radius_nm;
         document.getElementById('pollIntervalInput').value = settings.poll_interval_ms;
         document.getElementById('ringDistances').value = settings.rings.distances.join(',');
@@ -2511,8 +2603,10 @@ if (is_dir($geojsonDir)) {
     // Apply settings on button click
     document.getElementById('applySettings').addEventListener('click', () => {
         settings.airport.icao = document.getElementById('airportInput').value.trim().toUpperCase();
-        settings.airport.lat = parseFloat(document.getElementById('airportLatInput').value);
-        settings.airport.lon = parseFloat(document.getElementById('airportLonInput').value);
+        settings.feed_center.lat = parseFloat(document.getElementById('feedCenterLatInput').value);
+        settings.feed_center.lon = parseFloat(document.getElementById('feedCenterLonInput').value);
+        settings.display_center.lat = parseFloat(document.getElementById('displayCenterLatInput').value);
+        settings.display_center.lon = parseFloat(document.getElementById('displayCenterLonInput').value);
         const radiusVal = parseFloat(document.getElementById('radiusInput').value);
         settings.radius_nm = isNaN(radiusVal) ? settings.radius_nm : Math.min(250, Math.max(1, radiusVal));
         const pollVal = parseInt(document.getElementById('pollIntervalInput').value, 10);
@@ -2570,6 +2664,7 @@ if (is_dir($geojsonDir)) {
                 if (data.settings) {
                     settings = data.settings;
                 }
+                ensureCenters();
                 airacUpdateEnabled = !!data.airac_update_enabled;
                 vatmexDirConfigured = !!data.vatmex_dir_configured;
                 applySettings();
@@ -2578,6 +2673,7 @@ if (is_dir($geojsonDir)) {
                 startPolling();
             })
             .catch(() => {
+                ensureCenters();
                 applySettings();
                 vatmexDirConfigured = false;
                 loadStates();

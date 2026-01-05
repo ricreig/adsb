@@ -10,8 +10,14 @@ requireAuth($config);
 $defaults = [
     'airport' => [
         'icao' => $config['airport']['icao'],
+    ],
+    'feed_center' => [
         'lat' => (float)$config['airport']['lat'],
         'lon' => (float)$config['airport']['lon'],
+    ],
+    'display_center' => [
+        'lat' => (float)($config['display_center']['lat'] ?? 32.541),
+        'lon' => (float)($config['display_center']['lon'] ?? -116.97),
     ],
     'radius_nm' => 250,
     'poll_interval_ms' => (int)$config['poll_interval_ms'],
@@ -87,22 +93,46 @@ function normalizeHexColor($value, string $fallback): string
     return $fallback;
 }
 
-function normalizeSettings(array $input, array $defaults): array
+function normalizeSettings(array $input, array $base): array
 {
-    $settings = $defaults;
+    $settings = $base;
 
     if (isset($input['airport']) && is_array($input['airport'])) {
         $icao = strtoupper(trim((string)($input['airport']['icao'] ?? $settings['airport']['icao'])));
         if (preg_match('/^[A-Z0-9]{3,4}$/', $icao)) {
             $settings['airport']['icao'] = $icao;
         }
-        $lat = filter_var($input['airport']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
-        $lon = filter_var($input['airport']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+        if (!isset($input['feed_center'])) {
+            $lat = filter_var($input['airport']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+            $lon = filter_var($input['airport']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+            if ($lat !== false && $lat >= -90 && $lat <= 90) {
+                $settings['feed_center']['lat'] = (float)$lat;
+            }
+            if ($lon !== false && $lon >= -180 && $lon <= 180) {
+                $settings['feed_center']['lon'] = (float)$lon;
+            }
+        }
+    }
+
+    if (isset($input['feed_center']) && is_array($input['feed_center'])) {
+        $lat = filter_var($input['feed_center']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+        $lon = filter_var($input['feed_center']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
         if ($lat !== false && $lat >= -90 && $lat <= 90) {
-            $settings['airport']['lat'] = (float)$lat;
+            $settings['feed_center']['lat'] = (float)$lat;
         }
         if ($lon !== false && $lon >= -180 && $lon <= 180) {
-            $settings['airport']['lon'] = (float)$lon;
+            $settings['feed_center']['lon'] = (float)$lon;
+        }
+    }
+
+    if (isset($input['display_center']) && is_array($input['display_center'])) {
+        $lat = filter_var($input['display_center']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+        $lon = filter_var($input['display_center']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+        if ($lat !== false && $lat >= -90 && $lat <= 90) {
+            $settings['display_center']['lat'] = (float)$lat;
+        }
+        if ($lon !== false && $lon >= -180 && $lon <= 180) {
+            $settings['display_center']['lon'] = (float)$lon;
         }
     }
 
@@ -195,8 +225,8 @@ function normalizeSettings(array $input, array $defaults): array
                 continue;
             }
             $styles[$key] = [
-                'color' => normalizeHexColor($style['color'] ?? '', $defaults['category_styles']['default']['color']),
-                'weight' => $defaults['category_styles']['default']['weight'],
+                'color' => normalizeHexColor($style['color'] ?? '', $base['category_styles']['default']['color']),
+                'weight' => $base['category_styles']['default']['weight'],
                 'dash' => '',
             ];
             $weight = filter_var($style['weight'] ?? null, FILTER_VALIDATE_FLOAT);
@@ -259,8 +289,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($input)) {
         respond(['error' => 'Invalid JSON payload.'], 400);
     }
-
-    $settings = normalizeSettings($input, $defaults);
+    $stmt = $pdo->query('SELECT data FROM settings WHERE id = 1');
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stored = [];
+    if ($row && $row['data']) {
+        $decoded = json_decode($row['data'], true);
+        if (is_array($decoded)) {
+            $stored = $decoded;
+        }
+    }
+    $current = normalizeSettings($stored, $defaults);
+    $settings = normalizeSettings($input, $current);
     $stmt = $pdo->prepare('INSERT INTO settings (id, data, updated_at) VALUES (1, :data, :updated_at)
         ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at');
     $stmt->execute([

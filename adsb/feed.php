@@ -22,9 +22,13 @@ if (!is_dir($cacheDir)) {
 function loadStoredSettings(array $config): array
 {
     $settings = [
-        'airport' => [
+        'feed_center' => [
             'lat' => (float)$config['airport']['lat'],
             'lon' => (float)$config['airport']['lon'],
+        ],
+        'display_center' => [
+            'lat' => (float)($config['display_center']['lat'] ?? 32.541),
+            'lon' => (float)($config['display_center']['lon'] ?? -116.97),
         ],
         'radius_nm' => (float)$config['adsb_radius'],
     ];
@@ -40,14 +44,28 @@ function loadStoredSettings(array $config): array
         if ($row && $row['data']) {
             $decoded = json_decode($row['data'], true);
             if (is_array($decoded)) {
-                $lat = filter_var($decoded['airport']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
-                $lon = filter_var($decoded['airport']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+                $feed = $decoded['feed_center'] ?? null;
+                if (!is_array($feed) && isset($decoded['airport']) && is_array($decoded['airport'])) {
+                    $feed = $decoded['airport'];
+                }
+                $lat = filter_var($feed['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+                $lon = filter_var($feed['lon'] ?? null, FILTER_VALIDATE_FLOAT);
                 $radius = filter_var($decoded['radius_nm'] ?? null, FILTER_VALIDATE_FLOAT);
                 if ($lat !== false && $lat >= -90 && $lat <= 90) {
-                    $settings['airport']['lat'] = (float)$lat;
+                    $settings['feed_center']['lat'] = (float)$lat;
                 }
                 if ($lon !== false && $lon >= -180 && $lon <= 180) {
-                    $settings['airport']['lon'] = (float)$lon;
+                    $settings['feed_center']['lon'] = (float)$lon;
+                }
+                if (isset($decoded['display_center']) && is_array($decoded['display_center'])) {
+                    $dlat = filter_var($decoded['display_center']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+                    $dlon = filter_var($decoded['display_center']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+                    if ($dlat !== false && $dlat >= -90 && $dlat <= 90) {
+                        $settings['display_center']['lat'] = (float)$dlat;
+                    }
+                    if ($dlon !== false && $dlon >= -180 && $dlon <= 180) {
+                        $settings['display_center']['lon'] = (float)$dlon;
+                    }
                 }
                 if ($radius !== false && $radius > 0 && $radius <= 250) {
                     $settings['radius_nm'] = (float)$radius;
@@ -343,8 +361,8 @@ if ($radius === null || $radius === false) {
 }
 
 $storedSettings = loadStoredSettings($config);
-$lat = $lat !== false && $lat !== null ? $lat : (float)$storedSettings['airport']['lat'];
-$lon = $lon !== false && $lon !== null ? $lon : (float)$storedSettings['airport']['lon'];
+$lat = $lat !== false && $lat !== null ? $lat : (float)$storedSettings['feed_center']['lat'];
+$lon = $lon !== false && $lon !== null ? $lon : (float)$storedSettings['feed_center']['lon'];
 $radius = $radius !== false && $radius !== null ? $radius : (float)$storedSettings['radius_nm'];
 if ($radius <= 0 || $radius > 250) {
     $radius = (float)$config['adsb_radius'];
@@ -481,9 +499,11 @@ $firPolygons = loadGeojsonPolygons(__DIR__ . '/data/fir-limits.geojson');
 $mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
 
 $filteredByHex = [];
-$airportLat = (float)$storedSettings['airport']['lat'];
-$airportLon = (float)$storedSettings['airport']['lon'];
-$airportInsideFir = $firPolygons ? pointInPolygons($airportLat, $airportLon, $firPolygons) : false;
+$feedLat = (float)$storedSettings['feed_center']['lat'];
+$feedLon = (float)$storedSettings['feed_center']['lon'];
+$displayLat = (float)$storedSettings['display_center']['lat'];
+$displayLon = (float)$storedSettings['display_center']['lon'];
+$airportInsideFir = $firPolygons ? pointInPolygons($feedLat, $feedLon, $firPolygons) : false;
 $useFirFilter = $firPolygons && $airportInsideFir;
 $borderLat = (float)($config['border_lat'] ?? 0.0);
 $northBufferNm = (float)($config['north_buffer_nm'] ?? 10.0);
@@ -515,8 +535,8 @@ foreach ($data['ac'] as $ac) {
     if ($hex === '') {
         continue;
     }
-    $distanceNm = haversineNm($acLat, $acLon, $airportLat, $airportLon);
-    if ($distanceNm > $radius) {
+    $feedDistanceNm = haversineNm($acLat, $acLon, $feedLat, $feedLon);
+    if ($feedDistanceNm > $radius) {
         continue;
     }
     $flight = strtoupper(trim((string)($ac['flight'] ?? '')));
@@ -538,7 +558,8 @@ foreach ($data['ac'] as $ac) {
             $emergency = null;
         }
     }
-    $distanceRounded = round($distanceNm, 1);
+    $displayDistance = haversineNm($acLat, $acLon, $displayLat, $displayLon);
+    $distanceRounded = round($displayDistance, 1);
 
     $entry = [
         'hex' => $hex,

@@ -44,6 +44,7 @@ if (is_file($upstreamStatusPath)) {
 
 $cacheFiles = glob($cacheDir . '/adsb_feed_*.json') ?: [];
 $latestCacheAge = null;
+$latestCacheMtime = null;
 if ($cacheFiles) {
     $latestMtime = 0;
     foreach ($cacheFiles as $file) {
@@ -54,7 +55,14 @@ if ($cacheFiles) {
     }
     if ($latestMtime > 0) {
         $latestCacheAge = time() - $latestMtime;
+        $latestCacheMtime = date('c', $latestMtime);
     }
+}
+$cacheTtlMs = (int)($config['feed_cache_ttl_ms'] ?? 1500);
+$cacheMaxStaleMs = (int)($config['feed_cache_max_stale_ms'] ?? 5000);
+$cacheStale = null;
+if ($latestCacheAge !== null) {
+    $cacheStale = ($latestCacheAge * 1000) > $cacheMaxStaleMs;
 }
 
 $airacLogPath = $dataDir . '/airac_update.log';
@@ -97,6 +105,10 @@ echo json_encode([
     'feed' => [
         'upstream' => $upstreamStatus,
         'latest_cache_age_s' => $latestCacheAge,
+        'latest_cache_time' => $latestCacheMtime,
+        'cache_stale' => $cacheStale,
+        'cache_ttl_ms' => $cacheTtlMs,
+        'cache_max_stale_ms' => $cacheMaxStaleMs,
         'cache_dir' => $cacheDir,
         'cache_entries' => count($cacheFiles),
     ],

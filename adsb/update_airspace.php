@@ -707,6 +707,8 @@ function runGeojsonValidation(string $rootDir): array
     ];
 }
 
+$validation = null;
+
 try {
     // 1. Restricted areas
     $restricted = parseRestrictedAreas($basePath . '/RestrictedAreas.xml');
@@ -785,5 +787,9 @@ try {
         fwrite(STDERR, "Error: {$e->getMessage()}\n");
         exit(1);
     }
-    respond(['ok' => false, 'error' => $e->getMessage()], 500);
+    $payload = ['ok' => false, 'error' => $e->getMessage()];
+    if ($validation !== null) {
+        $payload['validation'] = $validation;
+    }
+    respond($payload, 500);
 }
