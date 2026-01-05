@@ -515,6 +515,10 @@ foreach ($data['ac'] as $ac) {
     if ($hex === '') {
         continue;
     }
+    $distanceNm = haversineNm($acLat, $acLon, $airportLat, $airportLon);
+    if ($distanceNm > $radius) {
+        continue;
+    }
     $flight = strtoupper(trim((string)($ac['flight'] ?? '')));
     $flight = $flight !== '' ? $flight : null;
     $alt = $ac['alt_baro'] ?? $ac['alt_geom'] ?? null;
@@ -534,7 +538,7 @@ foreach ($data['ac'] as $ac) {
             $emergency = null;
         }
     }
-    $distanceNm = haversineNm($acLat, $acLon, $airportLat, $airportLon);
+    $distanceRounded = round($distanceNm, 1);
 
     $entry = [
         'hex' => $hex,
@@ -551,9 +555,9 @@ foreach ($data['ac'] as $ac) {
         'baro_rate' => is_numeric($baroRate) ? (int)$baroRate : null,
         'geom_rate' => is_numeric($geomRate) ? (int)$geomRate : null,
         'seen_pos' => is_numeric($ac['seen_pos'] ?? null) ? (float)$ac['seen_pos'] : null,
-        'dst' => is_numeric($ac['dst'] ?? null) ? (float)$ac['dst'] : null,
+        'dst' => $distanceRounded,
         'dir' => is_numeric($ac['dir'] ?? null) ? (float)$ac['dir'] : null,
-        'distance_nm' => round($distanceNm, 1),
+        'distance_nm' => $distanceRounded,
     ];
     if (!isset($filteredByHex[$hex])) {
         $filteredByHex[$hex] = $entry;

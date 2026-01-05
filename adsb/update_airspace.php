@@ -654,6 +654,59 @@ function detectVatmexCommit(string $basePath): ?string
     return $commit !== '' ? $commit : null;
 }
 
+function runGeojsonValidation(string $rootDir): array
+{
+    $command = sprintf(
+        '%s %s',
+        escapeshellcmd(PHP_BINARY),
+        escapeshellarg($rootDir . '/scripts/validate_geojson.php')
+    );
+    $descriptorSpec = [
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $process = proc_open($command, $descriptorSpec, $pipes, $rootDir);
+    if (!is_resource($process)) {
+        return [
+            'ok' => false,
+            'exit_code' => 1,
+            'stdout' => '',
+            'stderr' => 'Failed to start validate_geojson.php',
+            'out_of_range' => null,
+        ];
+    }
+    $stdout = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[2]);
+    $exitCode = proc_close($process);
+
+    $outOfRange = 0;
+    if ($stdout) {
+        $lines = preg_split('/\r?\n/', trim($stdout));
+        foreach ($lines as $idx => $line) {
+            if ($idx === 0 || $line === '') {
+                continue;
+            }
+            if (str_contains($line, ',')) {
+                $parts = str_getcsv($line);
+                $value = $parts[3] ?? null;
+                if (is_numeric($value)) {
+                    $outOfRange += (int)$value;
+                }
+            }
+        }
+    }
+
+    return [
+        'ok' => $exitCode === 0,
+        'exit_code' => $exitCode,
+        'stdout' => $stdout,
+        'stderr' => $stderr,
+        'out_of_range' => $outOfRange,
+    ];
+}
+
 try {
     // 1. Restricted areas
     $restricted = parseRestrictedAreas($basePath . '/RestrictedAreas.xml');
@@ -712,6 +765,10 @@ try {
     if ($pdo) {
         persistCatalogToDb($pdo, array_values($catalog['layers'] ?? []));
     }
+    $validation = runGeojsonValidation(__DIR__);
+    if (!$validation['ok'] || ($validation['out_of_range'] !== null && $validation['out_of_range'] > 0)) {
+        throw new RuntimeException('GeoJSON validation failed. Out-of-range coordinates detected.');
+    }
 
     if ($isCli) {
         echo "Update complete.\n";
@@ -720,6 +777,7 @@ try {
             'ok' => true,
             'catalog' => $catalog,
             'output_dir' => $outputDir,
+            'validation' => $validation,
         ]);
     }
 } catch (Throwable $e) {

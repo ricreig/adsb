@@ -59,6 +59,7 @@ if ($cacheFiles) {
 
 $airacLogPath = $dataDir . '/airac_update.log';
 $airacStatus = null;
+$airacRecent = [];
 if (is_file($airacLogPath)) {
     $lines = file($airacLogPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     if ($lines) {
@@ -66,6 +67,18 @@ if (is_file($airacLogPath)) {
         $decoded = json_decode($lastLine, true);
         if (is_array($decoded)) {
             $airacStatus = $decoded;
+        }
+        $recentLines = array_slice($lines, -5);
+        foreach ($recentLines as $line) {
+            $entry = json_decode($line, true);
+            if (is_array($entry)) {
+                $airacRecent[] = [
+                    'ok' => $entry['ok'] ?? null,
+                    'exit_code' => $entry['exit_code'] ?? null,
+                    'started_at' => $entry['started_at'] ?? null,
+                    'finished_at' => $entry['finished_at'] ?? null,
+                ];
+            }
         }
     }
 }
@@ -85,9 +98,11 @@ echo json_encode([
         'upstream' => $upstreamStatus,
         'latest_cache_age_s' => $latestCacheAge,
         'cache_dir' => $cacheDir,
+        'cache_entries' => count($cacheFiles),
     ],
     'airac' => [
         'last_update' => $airacStatus,
+        'recent_runs' => $airacRecent,
         'log_path' => is_file($airacLogPath) ? $airacLogPath : null,
     ],
     'now' => date('c'),
