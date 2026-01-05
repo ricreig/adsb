@@ -4,14 +4,20 @@
 // referenced here are relative to the root of the project directory.
 
 return [
-    // Geographic coordinates for the reference point of the MMZT ACC core.
-    // These are used as the default centre for the display and feed queries.
+    // Primary airport reference (UI only).
     'airport' => [
         'icao' => 'MMZT',
         // Latitude and longitude of the reference point (decimal degrees).
         'lat' => 29.8839810,
         'lon' => -114.0747826,
     ],
+    // Fixed ADS-B feed center for ACC MMZT coverage (do not change).
+    'feed_center' => [
+        'lat' => 29.8839810,
+        'lon' => -114.0747826,
+    ],
+    // Fixed ADS-B feed radius (nautical miles).
+    'feed_radius_nm' => 250,
     // UI center (range rings + BRL/distance calculations) defaults to MMTJ.
     'ui_center' => [
         'lat' => 32.541,
@@ -47,9 +53,7 @@ return [
     'adsb_api_key' => null,
     'adsb_api_header' => 'X-API-Key',
 
-    // Radius of interest around the reference point in nautical miles.  The
-    // Airplanes.live API accepts radius up to 250nm.  Use 250nm to provide
-    // context but filter in feed.php to only show relevant aircraft.
+    // Legacy ADS-B radius (deprecated: use feed_radius_nm).
     'adsb_radius' => 250,
     // Feed cache TTL (milliseconds) and upstream rate limit (seconds).
     'feed_cache_ttl_ms' => 1500,

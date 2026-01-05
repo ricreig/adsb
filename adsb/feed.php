@@ -24,14 +24,14 @@ function loadStoredSettings(array $config): array
 {
     $settings = [
         'feed_center' => [
-            'lat' => (float)$config['airport']['lat'],
-            'lon' => (float)$config['airport']['lon'],
+            'lat' => (float)($config['feed_center']['lat'] ?? $config['airport']['lat']),
+            'lon' => (float)($config['feed_center']['lon'] ?? $config['airport']['lon']),
+            'radius_nm' => (float)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250),
         ],
         'ui_center' => [
             'lat' => (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541),
             'lon' => (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97),
         ],
-        'radius_nm' => (float)$config['adsb_radius'],
     ];
     $dbPath = $config['settings_db'] ?? null;
     if (!$dbPath || !is_file($dbPath)) {
@@ -46,17 +46,17 @@ function loadStoredSettings(array $config): array
             $decoded = json_decode($row['data'], true);
             if (is_array($decoded)) {
                 $feed = $decoded['feed_center'] ?? null;
-                if (!is_array($feed) && isset($decoded['airport']) && is_array($decoded['airport'])) {
-                    $feed = $decoded['airport'];
-                }
                 $lat = filter_var($feed['lat'] ?? null, FILTER_VALIDATE_FLOAT);
                 $lon = filter_var($feed['lon'] ?? null, FILTER_VALIDATE_FLOAT);
-                $radius = filter_var($decoded['radius_nm'] ?? null, FILTER_VALIDATE_FLOAT);
+                $radius = filter_var($feed['radius_nm'] ?? ($decoded['radius_nm'] ?? null), FILTER_VALIDATE_FLOAT);
                 if ($lat !== false && $lat >= -90 && $lat <= 90) {
                     $settings['feed_center']['lat'] = (float)$lat;
                 }
                 if ($lon !== false && $lon >= -180 && $lon <= 180) {
                     $settings['feed_center']['lon'] = (float)$lon;
+                }
+                if ($radius !== false && $radius > 0 && $radius <= 250) {
+                    $settings['feed_center']['radius_nm'] = (float)$radius;
                 }
                 $ui = $decoded['ui_center'] ?? $decoded['display_center'] ?? null;
                 if (isset($ui) && is_array($ui)) {
@@ -69,14 +69,19 @@ function loadStoredSettings(array $config): array
                         $settings['ui_center']['lon'] = (float)$dlon;
                     }
                 }
-                if ($radius !== false && $radius > 0 && $radius <= 250) {
-                    $settings['radius_nm'] = (float)$radius;
-                }
             }
         }
     } catch (Throwable $e) {
         return $settings;
     }
+    return enforceFixedFeedCenter($settings, $config);
+}
+
+function enforceFixedFeedCenter(array $settings, array $config): array
+{
+    $settings['feed_center']['lat'] = (float)($config['feed_center']['lat'] ?? $settings['feed_center']['lat']);
+    $settings['feed_center']['lon'] = (float)($config['feed_center']['lon'] ?? $settings['feed_center']['lon']);
+    $settings['feed_center']['radius_nm'] = (float)($config['feed_radius_nm'] ?? $settings['feed_center']['radius_nm']);
     return $settings;
 }
 
@@ -365,20 +370,10 @@ function haversineNm(float $lat1, float $lon1, float $lat2, float $lon2): float
     return $km / 1.852;
 }
 
-$lat = filter_input(INPUT_GET, 'lat', FILTER_VALIDATE_FLOAT);
-$lon = filter_input(INPUT_GET, 'lon', FILTER_VALIDATE_FLOAT);
-$radius = filter_input(INPUT_GET, 'radius_nm', FILTER_VALIDATE_FLOAT);
-if ($radius === null || $radius === false) {
-    $radius = filter_input(INPUT_GET, 'radius', FILTER_VALIDATE_FLOAT);
-}
-
 $storedSettings = loadStoredSettings($config);
-$lat = $lat !== false && $lat !== null ? $lat : (float)$storedSettings['feed_center']['lat'];
-$lon = $lon !== false && $lon !== null ? $lon : (float)$storedSettings['feed_center']['lon'];
-$radius = $radius !== false && $radius !== null ? $radius : (float)$storedSettings['radius_nm'];
-if ($radius <= 0 || $radius > 250) {
-    $radius = (float)$config['adsb_radius'];
-}
+$lat = (float)$storedSettings['feed_center']['lat'];
+$lon = (float)$storedSettings['feed_center']['lon'];
+$radius = (float)$storedSettings['feed_center']['radius_nm'];
 
 $cacheTtlMs = (int)($config['feed_cache_ttl_ms'] ?? 1500);
 $cacheMaxStaleMs = (int)($config['feed_cache_max_stale_ms'] ?? 5000);
@@ -402,6 +397,15 @@ if ($cached !== null) {
         'now' => date('c'),
         'total' => $cached['total'] ?? count($cached['ac'] ?? []),
         'ac' => $cached['ac'] ?? [],
+        'feed_center' => $cached['feed_center'] ?? [
+            'lat' => (float)$storedSettings['feed_center']['lat'],
+            'lon' => (float)$storedSettings['feed_center']['lon'],
+            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+        ],
+        'ui_center' => $cached['ui_center'] ?? [
+            'lat' => (float)$storedSettings['ui_center']['lat'],
+            'lon' => (float)$storedSettings['ui_center']['lon'],
+        ],
     ]);
 }
 
@@ -422,6 +426,15 @@ if (!$canRequestUpstream) {
             'now' => date('c'),
             'total' => $fallbackTotal,
             'ac' => $fallbackAc,
+            'feed_center' => $stalePayload['feed_center'] ?? [
+                'lat' => (float)$storedSettings['feed_center']['lat'],
+                'lon' => (float)$storedSettings['feed_center']['lon'],
+                'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+            ],
+            'ui_center' => $stalePayload['ui_center'] ?? [
+                'lat' => (float)$storedSettings['ui_center']['lat'],
+                'lon' => (float)$storedSettings['ui_center']['lon'],
+            ],
         ], 200);
     }
     respond([
@@ -434,6 +447,15 @@ if (!$canRequestUpstream) {
         'now' => date('c'),
         'total' => 0,
         'ac' => [],
+        'feed_center' => [
+            'lat' => (float)$storedSettings['feed_center']['lat'],
+            'lon' => (float)$storedSettings['feed_center']['lon'],
+            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+        ],
+        'ui_center' => [
+            'lat' => (float)$storedSettings['ui_center']['lat'],
+            'lon' => (float)$storedSettings['ui_center']['lon'],
+        ],
     ], 200);
 }
 
@@ -475,6 +497,15 @@ if ($response === false) {
             'now' => date('c'),
             'total' => $fallbackTotal,
             'ac' => $fallbackAc,
+            'feed_center' => $stalePayload['feed_center'] ?? [
+                'lat' => (float)$storedSettings['feed_center']['lat'],
+                'lon' => (float)$storedSettings['feed_center']['lon'],
+                'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+            ],
+            'ui_center' => $stalePayload['ui_center'] ?? [
+                'lat' => (float)$storedSettings['ui_center']['lat'],
+                'lon' => (float)$storedSettings['ui_center']['lon'],
+            ],
         ], 200);
     }
     respond([
@@ -487,6 +518,15 @@ if ($response === false) {
         'now' => date('c'),
         'total' => 0,
         'ac' => [],
+        'feed_center' => [
+            'lat' => (float)$storedSettings['feed_center']['lat'],
+            'lon' => (float)$storedSettings['feed_center']['lon'],
+            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+        ],
+        'ui_center' => [
+            'lat' => (float)$storedSettings['ui_center']['lat'],
+            'lon' => (float)$storedSettings['ui_center']['lon'],
+        ],
     ], 200);
 }
 
@@ -502,6 +542,15 @@ if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) {
         'now' => time(),
         'total' => 0,
         'ac' => [],
+        'feed_center' => [
+            'lat' => (float)$storedSettings['feed_center']['lat'],
+            'lon' => (float)$storedSettings['feed_center']['lon'],
+            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+        ],
+        'ui_center' => [
+            'lat' => (float)$storedSettings['ui_center']['lat'],
+            'lon' => (float)$storedSettings['ui_center']['lon'],
+        ],
     ], 200);
 }
 
@@ -561,6 +610,7 @@ foreach ($data['ac'] as $ac) {
     }
     $displayDistance = haversineNm($acLat, $acLon, $uiLat, $uiLon);
     $distanceRounded = round($displayDistance, 1);
+    $feedDistanceRounded = round($feedDistanceNm, 1);
 
     $entry = [
         'hex' => $hex,
@@ -580,6 +630,8 @@ foreach ($data['ac'] as $ac) {
         'dst' => $distanceRounded,
         'dir' => is_numeric($ac['dir'] ?? null) ? (float)$ac['dir'] : null,
         'distance_nm' => $distanceRounded,
+        'distance_ui_nm' => $distanceRounded,
+        'distance_feed_nm' => $feedDistanceRounded,
     ];
     if (!isset($unfilteredByHex[$hex])) {
         $unfilteredByHex[$hex] = $entry;
@@ -642,6 +694,15 @@ usort($filtered, function (array $a, array $b): int {
 $payload = [
     'ac' => $filtered,
     'total' => count($filtered),
+    'feed_center' => [
+        'lat' => (float)$storedSettings['feed_center']['lat'],
+        'lon' => (float)$storedSettings['feed_center']['lon'],
+        'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+    ],
+    'ui_center' => [
+        'lat' => (float)$storedSettings['ui_center']['lat'],
+        'lon' => (float)$storedSettings['ui_center']['lon'],
+    ],
 ];
 writeCache($cacheKey, $cacheFile, $payload, $coordDecimals, $altThreshold);
 

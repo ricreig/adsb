@@ -7,6 +7,23 @@ $config = require __DIR__ . '/config.php';
 require __DIR__ . '/auth.php';
 requireAuth($config);
 
+$expectedFeed = [
+    'lat' => '29.8839810',
+    'lon' => '-114.0747826',
+    'radius_nm' => 250,
+];
+$actualFeed = [
+    'lat' => number_format((float)($config['feed_center']['lat'] ?? $config['airport']['lat'] ?? 0), 7, '.', ''),
+    'lon' => number_format((float)($config['feed_center']['lon'] ?? $config['airport']['lon'] ?? 0), 7, '.', ''),
+    'radius_nm' => (int)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 0),
+];
+$feedCenterFixedOk = $actualFeed['lat'] === $expectedFeed['lat']
+    && $actualFeed['lon'] === $expectedFeed['lon']
+    && $actualFeed['radius_nm'] === $expectedFeed['radius_nm'];
+$feedCenterWarning = $feedCenterFixedOk
+    ? null
+    : 'FEED_CENTER mismatch: expected 29.8839810/-114.0747826 radius 250 NM.';
+
 $base = '/' . trim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
 if ($base === '/') {
     $base = '/';
@@ -31,6 +48,9 @@ if (is_file($dbPath)) {
 }
 
 $status = ($sqliteAvailable && $dataDirWritable && $cacheDirWritable && $sqliteWritable) ? 'ok' : 'degraded';
+if (!$feedCenterFixedOk) {
+    $status = 'degraded';
+}
 
 $upstreamStatusPath = $cacheDir . '/upstream.status.json';
 $upstreamStatus = null;
@@ -101,6 +121,12 @@ echo json_encode([
         'data_dir' => $dataDirWritable,
         'cache_dir' => $cacheDirWritable,
         'sqlite_file' => $sqliteWritable,
+    ],
+    'feed_center' => [
+        'expected' => $expectedFeed,
+        'actual' => $actualFeed,
+        'fixed_ok' => $feedCenterFixedOk,
+        'warning' => $feedCenterWarning,
     ],
     'feed' => [
         'upstream' => $upstreamStatus,

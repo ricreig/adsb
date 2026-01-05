@@ -478,10 +478,10 @@ if (is_dir($geojsonDir)) {
                 <input type="text" id="airportInput" value="<?php echo htmlspecialchars($config['airport']['icao']); ?>" style="width:80px;margin-left:4px;"/>
             </label>
             <label style="display:block;margin-bottom:4px;">Feed Center Lat
-                <input type="number" id="feedCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['airport']['lat']); ?>" style="width:90px;margin-left:4px;"/>
+                <input type="number" id="feedCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['feed_center']['lat'] ?? $config['airport']['lat']); ?>" style="width:90px;margin-left:4px;" disabled/>
             </label>
             <label style="display:block;margin-bottom:4px;">Feed Center Lon
-                <input type="number" id="feedCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['airport']['lon']); ?>" style="width:90px;margin-left:4px;"/>
+                <input type="number" id="feedCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['feed_center']['lon'] ?? $config['airport']['lon']); ?>" style="width:90px;margin-left:4px;" disabled/>
             </label>
             <label style="display:block;margin-bottom:4px;">UI Center Lat
                 <input type="number" id="displayCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>" style="width:90px;margin-left:4px;"/>
@@ -490,7 +490,7 @@ if (is_dir($geojsonDir)) {
                 <input type="number" id="displayCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>" style="width:90px;margin-left:4px;"/>
             </label>
             <label style="display:block;margin-bottom:4px;">Radius (NM, max 250)
-                <input type="number" id="radiusInput" min="1" max="250" value="250" style="width:80px;margin-left:4px;"/>
+                <input type="number" id="radiusInput" min="1" max="250" value="<?php echo htmlspecialchars((string)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250)); ?>" style="width:80px;margin-left:4px;" disabled/>
             </label>
             <label style="display:block;margin-bottom:4px;">Polling Interval (ms)
                 <input type="number" id="pollIntervalInput" min="500" max="5000" value="1500" style="width:80px;margin-left:4px;"/>
@@ -645,13 +645,22 @@ if (is_dir($geojsonDir)) {
         leafletUrl: null,
         feedStatus: 'unknown',
         feedUpdatedAt: null,
+        feedCenterWarning: null,
     };
 
     function renderDiagnostics() {
+        const feedCenter = settings && settings.feed_center ? settings.feed_center : defaultSettings.feed_center;
+        const uiCenter = settings && settings.ui_center ? settings.ui_center : defaultSettings.ui_center;
+        const feedFixedOk = Number(feedCenter.lat.toFixed(7)) === Number(expectedFeedCenter.lat.toFixed(7))
+            && Number(feedCenter.lon.toFixed(7)) === Number(expectedFeedCenter.lon.toFixed(7))
+            && Number(feedCenter.radius_nm) === expectedFeedCenter.radius_nm;
         const lines = [
             'Diagnostics',
             `Health: ${diagnostics.healthStatus}`,
             diagnostics.healthDetail ? `Health detail: ${diagnostics.healthDetail}` : null,
+            `FEED_CENTER: ${feedCenter.lat.toFixed(7)}, ${feedCenter.lon.toFixed(7)} · ${feedCenter.radius_nm} NM · ${feedFixedOk ? 'FIXED OK' : 'WARNING'}`,
+            `UI_CENTER: ${uiCenter.lat.toFixed(3)}, ${uiCenter.lon.toFixed(3)}`,
+            diagnostics.feedCenterWarning ? `FEED_CENTER warning: ${diagnostics.feedCenterWarning}` : null,
             `Leaflet: ${diagnostics.leafletSource}`,
             diagnostics.leafletUrl ? `Leaflet URL: ${diagnostics.leafletUrl}` : null,
             `Feed: ${diagnostics.feedStatus}`,
@@ -810,6 +819,7 @@ if (is_dir($geojsonDir)) {
             .then(data => {
                 diagnostics.healthStatus = data && data.status ? data.status : 'unknown';
                 diagnostics.healthDetail = data ? JSON.stringify(data, null, 2) : null;
+                diagnostics.feedCenterWarning = data && data.feed_center ? data.feed_center.warning : null;
                 if (!data || data.status !== 'ok') {
                     reportError('Health check reported degraded status', JSON.stringify(data, null, 2));
                 }
@@ -1183,11 +1193,20 @@ if (is_dir($geojsonDir)) {
         if (!debugInfo) {
             return;
         }
+        const feedCenter = settings.feed_center || defaultSettings.feed_center;
+        const uiCenter = settings.ui_center || defaultSettings.ui_center;
+        const feedFixedOk = Number(feedCenter.lat.toFixed(7)) === Number(expectedFeedCenter.lat.toFixed(7))
+            && Number(feedCenter.lon.toFixed(7)) === Number(expectedFeedCenter.lon.toFixed(7))
+            && Number(feedCenter.radius_nm) === expectedFeedCenter.radius_nm;
         const markerCount = Object.keys(flightMarkers).length;
         const trackCount = Object.values(flightMarkers).filter(entry => entry.track).length;
         const labelCount = Object.values(flightMarkers).filter(entry => entry.marker && entry.marker.getTooltip()).length;
         const polling = pollTimer ? 1 : 0;
-        debugInfo.textContent = `markers: ${markerCount} · tracks: ${trackCount} · labels: ${labelCount} · polling: ${polling}`;
+        debugInfo.textContent = [
+            `markers: ${markerCount} · tracks: ${trackCount} · labels: ${labelCount} · polling: ${polling}`,
+            `FEED_CENTER: ${feedCenter.lat.toFixed(7)}, ${feedCenter.lon.toFixed(7)} · ${feedCenter.radius_nm} NM · ${feedFixedOk ? 'FIXED OK' : 'WARNING'}`,
+            `UI_CENTER: ${uiCenter.lat.toFixed(3)}, ${uiCenter.lon.toFixed(3)}`,
+        ].join('\n');
     }
 
     const defaultSettings = {
@@ -1195,14 +1214,14 @@ if (is_dir($geojsonDir)) {
             icao: '<?php echo addslashes($config['airport']['icao']); ?>',
         },
         feed_center: {
-            lat: <?php echo (float)$config['airport']['lat']; ?>,
-            lon: <?php echo (float)$config['airport']['lon']; ?>,
+            lat: <?php echo (float)($config['feed_center']['lat'] ?? $config['airport']['lat']); ?>,
+            lon: <?php echo (float)($config['feed_center']['lon'] ?? $config['airport']['lon']); ?>,
+            radius_nm: <?php echo (float)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250); ?>,
         },
         ui_center: {
             lat: <?php echo (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>,
             lon: <?php echo (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>,
         },
-        radius_nm: 250,
         poll_interval_ms: <?php echo (int)$config['poll_interval_ms']; ?>,
         rings: {
             distances: [50, 100, 150, 200, 250],
@@ -1239,6 +1258,12 @@ if (is_dir($geojsonDir)) {
                 dash: '',
             },
         },
+    };
+
+    const expectedFeedCenter = {
+        lat: 29.8839810,
+        lon: -114.0747826,
+        radius_nm: 250,
     };
 
     let settings = JSON.parse(JSON.stringify(defaultSettings));
@@ -1341,28 +1366,8 @@ if (is_dir($geojsonDir)) {
     }
 
     function buildAircraftId(ac) {
-        const hex = normalizeIdPart(ac.hex);
-        if (hex) {
-            return hex;
-        }
-        const icao = normalizeIdPart(ac.icao || ac.icao24);
-        const reg = normalizeIdPart(ac.reg || ac.registration || ac.r);
-        const flight = normalizeIdPart(ac.flight);
-        const parts = [icao, reg, flight].filter(Boolean);
-        if (parts.length) {
-            return parts.join('|');
-        }
-        const addr = normalizeIdPart(ac.addr || ac.hexid);
-        if (addr) {
-            return addr;
-        }
-        if (isValidLat(ac.lat) && isValidLon(ac.lon)) {
-            const lat = Number(ac.lat).toFixed(4);
-            const lon = Number(ac.lon).toFixed(4);
-            const alt = Number.isFinite(ac.alt) ? Math.round(ac.alt) : '';
-            return `POS:${lat}|${lon}${alt !== '' ? `|${alt}` : ''}`;
-        }
-        return null;
+        const hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid);
+        return hex || null;
     }
 
     function normalizeCenter(center, fallback) {
@@ -1374,13 +1379,28 @@ if (is_dir($geojsonDir)) {
 
     function ensureCenters() {
         settings.feed_center = normalizeCenter(
-            settings.feed_center || settings.airport,
+            settings.feed_center,
             defaultSettings.feed_center
         );
+        if (!settings.feed_center.radius_nm || !Number.isFinite(settings.feed_center.radius_nm)) {
+            settings.feed_center.radius_nm = defaultSettings.feed_center.radius_nm;
+        }
         settings.ui_center = normalizeCenter(
             settings.ui_center || settings.display_center,
             defaultSettings.ui_center
         );
+    }
+
+    function normalizeSettingsPayload(input) {
+        const merged = { ...defaultSettings, ...(input || {}) };
+        const feedSource = input && input.feed_center ? input.feed_center : {};
+        merged.feed_center = { ...defaultSettings.feed_center, ...feedSource };
+        if (input && input.radius_nm && !feedSource.radius_nm) {
+            merged.feed_center.radius_nm = input.radius_nm;
+        }
+        const uiSource = input && input.ui_center ? input.ui_center : (input && input.display_center ? input.display_center : {});
+        merged.ui_center = { ...defaultSettings.ui_center, ...uiSource };
+        return merged;
     }
 
     function normalizeLonLat(coord) {
@@ -2561,10 +2581,8 @@ if (is_dir($geojsonDir)) {
             pollAbort.abort();
         }
         pollAbort = new AbortController();
-        const radius = Math.min(250, settings.radius_nm || 250);
-        const url = buildUrl('feed.php') + '?lat=' + encodeURIComponent(settings.feed_center.lat)
-            + '&lon=' + encodeURIComponent(settings.feed_center.lon)
-            + '&radius_nm=' + encodeURIComponent(radius);
+        const radius = Math.min(250, settings.feed_center.radius_nm || 250);
+        const url = buildUrl('feed.php');
         fetchJson(url, { signal: pollAbort.signal }, 'Feed request')
             .then(data => {
                 if (!data || data.ok !== true) {
@@ -2689,7 +2707,7 @@ if (is_dir($geojsonDir)) {
         document.getElementById('feedCenterLonInput').value = settings.feed_center.lon;
         document.getElementById('displayCenterLatInput').value = settings.ui_center.lat;
         document.getElementById('displayCenterLonInput').value = settings.ui_center.lon;
-        document.getElementById('radiusInput').value = settings.radius_nm;
+        document.getElementById('radiusInput').value = settings.feed_center.radius_nm;
         document.getElementById('pollIntervalInput').value = settings.poll_interval_ms;
         document.getElementById('ringDistances').value = settings.rings.distances.join(',');
         document.getElementById('ringColour').value = settings.rings.style.color;
@@ -2714,12 +2732,9 @@ if (is_dir($geojsonDir)) {
     // Apply settings on button click
     document.getElementById('applySettings').addEventListener('click', () => {
         settings.airport.icao = document.getElementById('airportInput').value.trim().toUpperCase();
-        settings.feed_center.lat = parseFloat(document.getElementById('feedCenterLatInput').value);
-        settings.feed_center.lon = parseFloat(document.getElementById('feedCenterLonInput').value);
+        settings.feed_center = { ...defaultSettings.feed_center };
         settings.ui_center.lat = parseFloat(document.getElementById('displayCenterLatInput').value);
         settings.ui_center.lon = parseFloat(document.getElementById('displayCenterLonInput').value);
-        const radiusVal = parseFloat(document.getElementById('radiusInput').value);
-        settings.radius_nm = isNaN(radiusVal) ? settings.radius_nm : Math.min(250, Math.max(1, radiusVal));
         const pollVal = parseInt(document.getElementById('pollIntervalInput').value, 10);
         settings.poll_interval_ms = isNaN(pollVal) ? settings.poll_interval_ms : Math.min(5000, Math.max(500, pollVal));
         const rd = document.getElementById('ringDistances').value.split(',').map(x => parseFloat(x));
@@ -2754,7 +2769,7 @@ if (is_dir($geojsonDir)) {
         })
             .then(data => {
                 if (data.settings) {
-                    settings = data.settings;
+                    settings = normalizeSettingsPayload(data.settings);
                     airacUpdateEnabled = !!data.airac_update_enabled;
                     vatmexDirConfigured = !!data.vatmex_dir_configured;
                     applySettings();
@@ -2773,7 +2788,7 @@ if (is_dir($geojsonDir)) {
         fetchJson(apiUrl('settings.php'), {}, 'Load settings')
             .then(data => {
                 if (data.settings) {
-                    settings = data.settings;
+                    settings = normalizeSettingsPayload(data.settings);
                 }
                 ensureCenters();
                 airacUpdateEnabled = !!data.airac_update_enabled;
