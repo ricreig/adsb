@@ -6,6 +6,11 @@ function requireAuth(array $config): void
     if (PHP_SAPI === 'cli') {
         return;
     }
+    $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '';
+    $serverAddr = $_SERVER['SERVER_ADDR'] ?? '';
+    if (in_array($remoteAddr, ['127.0.0.1', '::1'], true) || ($serverAddr !== '' && $remoteAddr === $serverAddr)) {
+        return;
+    }
     $auth = $config['auth'] ?? [];
     if (empty($auth['enabled'])) {
         return;

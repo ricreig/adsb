@@ -584,7 +584,7 @@ if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) {
 
 updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, null);
 
-$borderFilterEnabled = (bool)($config['mex_border_filter_enabled'] ?? true);
+$borderFilterEnabled = (bool)($config['mex_border_filter_enabled'] ?? false);
 $mexBorderBufferNm = (float)($config['mex_border_buffer_nm'] ?? 10.0);
 $mexPolygons = $borderFilterEnabled ? loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson') : [];
 
@@ -687,17 +687,19 @@ foreach ($data['ac'] as $ac) {
         }
     }
 
-    if (!isset($filteredByHex[$hex])) {
-        $filteredByHex[$hex] = $entry;
-        continue;
-    }
-    if (shouldReplaceEntry($filteredByHex[$hex], $entry, $altThreshold, $coordDecimals)) {
-        $filteredByHex[$hex] = $entry;
+    if ($borderFilterEnabled) {
+        if (!isset($filteredByHex[$hex])) {
+            $filteredByHex[$hex] = $entry;
+            continue;
+        }
+        if (shouldReplaceEntry($filteredByHex[$hex], $entry, $altThreshold, $coordDecimals)) {
+            $filteredByHex[$hex] = $entry;
+        }
     }
 }
 
 $removedUnfiltered = cleanupStaleEntries($unfilteredByHex, $cacheCleanupThreshold);
-$removedFiltered = cleanupStaleEntries($filteredByHex, $cacheCleanupThreshold);
+$removedFiltered = $borderFilterEnabled ? cleanupStaleEntries($filteredByHex, $cacheCleanupThreshold) : 0;
 if ($removedUnfiltered > 0 || $removedFiltered > 0) {
     $filterLogger(sprintf(
         'cache_cleanup removed_unfiltered=%d removed_filtered=%d threshold=%s',
@@ -707,10 +709,7 @@ if ($removedUnfiltered > 0 || $removedFiltered > 0) {
     ));
 }
 
-$filtered = array_values($filteredByHex);
-if (count($filtered) <= 1 && count($unfilteredByHex) > count($filteredByHex)) {
-    $filtered = array_values($unfilteredByHex);
-}
+$filtered = array_values($borderFilterEnabled ? $filteredByHex : $unfilteredByHex);
 
 usort($filtered, function (array $a, array $b): int {
     return ($a['distance_nm'] ?? 0) <=> ($b['distance_nm'] ?? 0);

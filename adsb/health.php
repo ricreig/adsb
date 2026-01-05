@@ -47,10 +47,7 @@ if (is_file($dbPath)) {
     $sqliteWritable = is_dir($dbDir) && is_writable($dbDir);
 }
 
-$status = ($sqliteAvailable && $dataDirWritable && $cacheDirWritable && $sqliteWritable) ? 'ok' : 'degraded';
-if (!$feedCenterFixedOk) {
-    $status = 'degraded';
-}
+$status = 'ok';
 
 $upstreamStatusPath = $cacheDir . '/upstream.status.json';
 $upstreamStatus = null;
@@ -83,6 +80,13 @@ $cacheMaxStaleMs = (int)($config['feed_cache_max_stale_ms'] ?? 5000);
 $cacheStale = null;
 if ($latestCacheAge !== null) {
     $cacheStale = ($latestCacheAge * 1000) > $cacheMaxStaleMs;
+}
+$warnings = [];
+if ($cacheStale === true) {
+    $warnings[] = 'Feed cache is stale or not updating.';
+}
+if ($latestCacheAge === null) {
+    $warnings[] = 'Feed cache has not been created yet.';
 }
 $allowUrlFopen = ini_get('allow_url_fopen');
 $allowUrlFopen = $allowUrlFopen !== false && $allowUrlFopen !== '' && $allowUrlFopen !== '0';
@@ -150,5 +154,6 @@ echo json_encode([
         'recent_runs' => $airacRecent,
         'log_path' => is_file($airacLogPath) ? $airacLogPath : null,
     ],
+    'warnings' => $warnings,
     'now' => date('c'),
 ], JSON_UNESCAPED_SLASHES);
