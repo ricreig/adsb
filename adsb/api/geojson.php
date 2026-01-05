@@ -115,7 +115,7 @@ if ($limit !== null && isset($data['features']) && is_array($data['features'])) 
 
 $meta = [
     'layer' => $layer,
-    'total_features' => $totalFeatures,
+    'total' => $totalFeatures,
     'returned' => isset($data['features']) && is_array($data['features']) ? count($data['features']) : 0,
     'limit' => $limit,
     'truncated' => $limit !== null && $totalFeatures > $limit,
