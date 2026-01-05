@@ -359,6 +359,42 @@ function updateLastUpstreamStatus(string $path, ?int $status, ?string $error): v
     writeCacheFile($path, $payload);
 }
 
+function fetchUpstream(string $url, array $headers, int $timeoutSeconds = 5): array
+{
+    $headerLines = $headers;
+    $headerLines[] = 'User-Agent: ADSB-ATC-Display';
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $timeoutSeconds);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeoutSeconds);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headerLines);
+        $body = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE) ?: null;
+        $error = $body === false ? curl_error($ch) : null;
+        curl_close($ch);
+        return [$body, $status, $error];
+    }
+
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => $timeoutSeconds,
+            'ignore_errors' => true,
+            'header' => $headerLines ? implode("\r\n", $headerLines) : '',
+        ],
+    ]);
+    $body = @file_get_contents($url, false, $context);
+    $status = null;
+    if (isset($http_response_header) && is_array($http_response_header) && isset($http_response_header[0])) {
+        if (preg_match('/HTTP\/\S+\s+(\d+)/', $http_response_header[0], $matches)) {
+            $status = (int)$matches[1];
+        }
+    }
+    return [$body, $status, $body === false ? 'Upstream request failed' : null];
+}
+
 function haversineNm(float $lat1, float $lon1, float $lat2, float $lon2): float
 {
     $R = 6371.0;
@@ -466,24 +502,16 @@ if (!empty($config['adsb_api_key'])) {
     $headers[] = $headerName . ': ' . $config['adsb_api_key'];
 }
 
-$context = stream_context_create([
-    'http' => [
-        'method' => 'GET',
-        'timeout' => 5,
-        'header' => $headers ? implode("\r\n", $headers) : '',
-    ],
-]);
+$upstreamError = null;
+[$response, $upstreamStatus, $upstreamError] = fetchUpstream($feedUrl, $headers, 5);
 
-$response = @file_get_contents($feedUrl, false, $context);
-$upstreamStatus = null;
-if (isset($http_response_header) && is_array($http_response_header) && isset($http_response_header[0])) {
-    if (preg_match('/HTTP\/\S+\s+(\d+)/', $http_response_header[0], $matches)) {
-        $upstreamStatus = (int)$matches[1];
+if ($response === false || ($upstreamStatus !== null && $upstreamStatus >= 400)) {
+    $errorMessage = $upstreamError;
+    if ($errorMessage === null && $upstreamStatus !== null) {
+        $errorMessage = 'Upstream HTTP ' . $upstreamStatus;
     }
-}
-
-if ($response === false) {
-    updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, 'Upstream request failed');
+    $errorMessage ??= 'Upstream request failed';
+    updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, $errorMessage);
     $fallbackAc = $stalePayload['ac'] ?? [];
     $fallbackTotal = $stalePayload['total'] ?? count($fallbackAc);
     if ($stalePayload) {
@@ -510,7 +538,7 @@ if ($response === false) {
     }
     respond([
         'ok' => false,
-        'error' => 'Unable to retrieve ADS-B data.',
+        'error' => $errorMessage,
         'upstream_http' => $upstreamStatus,
         'cache_hit' => false,
         'cache_stale' => false,
