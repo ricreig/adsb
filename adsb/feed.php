@@ -436,7 +436,7 @@ updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, n
 $firPolygons = loadGeojsonPolygons(__DIR__ . '/data/fir-limits.geojson');
 $mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
 
-$filtered = [];
+$filteredByHex = [];
 $airportLat = (float)$config['airport']['lat'];
 $airportLon = (float)$config['airport']['lon'];
 $airportInsideFir = $firPolygons ? pointInPolygons($airportLat, $airportLon, $firPolygons) : false;
@@ -492,7 +492,7 @@ foreach ($data['ac'] as $ac) {
     }
     $distanceNm = haversineNm($acLat, $acLon, $airportLat, $airportLon);
 
-    $filtered[] = [
+    $entry = [
         'hex' => $hex,
         'flight' => $flight,
         'reg' => isset($ac['r']) && trim((string)$ac['r']) !== '' ? strtoupper(trim((string)$ac['r'])) : null,
@@ -511,7 +511,19 @@ foreach ($data['ac'] as $ac) {
         'dir' => is_numeric($ac['dir'] ?? null) ? (float)$ac['dir'] : null,
         'distance_nm' => round($distanceNm, 1),
     ];
+    if (!isset($filteredByHex[$hex])) {
+        $filteredByHex[$hex] = $entry;
+        continue;
+    }
+    $existing = $filteredByHex[$hex];
+    $existingSeen = is_numeric($existing['seen_pos'] ?? null) ? (float)$existing['seen_pos'] : INF;
+    $entrySeen = is_numeric($entry['seen_pos'] ?? null) ? (float)$entry['seen_pos'] : INF;
+    if ($entrySeen < $existingSeen) {
+        $filteredByHex[$hex] = $entry;
+    }
 }
+
+$filtered = array_values($filteredByHex);
 
 usort($filtered, function (array $a, array $b): int {
     return ($a['distance_nm'] ?? 0) <=> ($b['distance_nm'] ?? 0);
