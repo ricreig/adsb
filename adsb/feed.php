@@ -556,7 +556,9 @@ if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) {
 
 updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, null);
 
-$mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
+$mexBorderFilterEnabled = (bool)($config['mex_border_filter_enabled'] ?? true);
+$mexBorderBufferNm = (float)($config['mex_border_buffer_nm'] ?? 10.0);
+$mexPolygons = $mexBorderFilterEnabled ? loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson') : [];
 
 $filteredByHex = [];
 $unfilteredByHex = [];
@@ -642,7 +644,7 @@ foreach ($data['ac'] as $ac) {
         $insideMex = pointInPolygons($acLat, $acLon, $mexPolygons);
         if (!$insideMex) {
             $distNm = distanceToPolygonsNm($acLat, $acLon, $mexPolygons);
-            if ($distNm > 10.0) {
+            if ($distNm > $mexBorderBufferNm) {
                 logFilterDiscard($filterLogger, $entry, 'mex_border_distance');
                 continue;
             }

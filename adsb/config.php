@@ -74,6 +74,13 @@ return [
     // traffic well into US airspace while still showing coastal traffic.
     'border_lat' => 32.542,
 
+    // Toggle filtering based on the Mexico border GeoJSON. Disable this if
+    // the deployment is outside Mexico and you want to keep all traffic.
+    'mex_border_filter_enabled' => true,
+    // Buffer outside Mexico (nautical miles) to keep when using
+    // data/mex-border.geojson.
+    'mex_border_buffer_nm' => 10,
+
     // Buffer north of the border in nautical miles.  Aircraft further north
     // than border_lat + (north_buffer_nm / 60) degrees will be filtered.
     'north_buffer_nm' => 10,
