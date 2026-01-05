@@ -19,6 +19,7 @@ ini_set('max_execution_time', '600');
 
 $config = require __DIR__ . '/config.php';
 require __DIR__ . '/auth.php';
+require_once __DIR__ . '/geojson_helpers.php';
 requireAuth($config);
 
 $isCli = PHP_SAPI === 'cli';
@@ -185,17 +186,11 @@ function parseCoordinatePair(string $pair): ?array
  */
 function writeGeoJSON(string $name, array $features, string $outputDir): void
 {
-    foreach ($features as &$feature) {
-        if (!isset($feature['geometry']['coordinates'])) {
-            continue;
-        }
-        $feature['geometry']['coordinates'] = normalizeCoordinates($feature['geometry']['coordinates']);
-    }
-    unset($feature);
     $geojson = [
         'type' => 'FeatureCollection',
         'features' => $features,
     ];
+    $geojson = normalizeGeojson($geojson);
     $path = $outputDir . '/' . $name . '.geojson';
     file_put_contents($path, json_encode($geojson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     echo "Written: $path\n";

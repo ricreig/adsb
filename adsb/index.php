@@ -36,9 +36,6 @@ if (is_dir($geojsonDir)) {
             continue;
         }
         $id = pathinfo($file, PATHINFO_FILENAME);
-        if ($id === 'mex-border') {
-            continue;
-        }
         $layerFiles[$id] = 'api/geojson.php?layer=' . rawurlencode($id);
     }
 }
@@ -1368,11 +1365,24 @@ if (is_dir($geojsonDir)) {
     }
 
     function isValidLat(lat) {
-        return Number.isFinite(lat) && lat >= -90 && lat <= 90;
+        const value = coerceNumber(lat);
+        return value !== null && value >= -90 && value <= 90;
     }
 
     function isValidLon(lon) {
-        return Number.isFinite(lon) && lon >= -180 && lon <= 180;
+        const value = coerceNumber(lon);
+        return value !== null && value >= -180 && value <= 180;
+    }
+
+    function coerceNumber(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return null;
+        }
+        return num;
     }
 
     function normalizeIdPart(value) {
@@ -1385,7 +1395,24 @@ if (is_dir($geojsonDir)) {
 
     function buildAircraftId(ac) {
         const hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid);
-        return hex || null;
+        if (hex) {
+            return hex;
+        }
+        const icao = normalizeIdPart(ac.icao24 || ac.addr || ac.hexid);
+        const flight = normalizeIdPart(ac.flight || ac.callsign);
+        if (icao && flight) {
+            return `${icao}-${flight}`;
+        }
+        if (icao) {
+            return icao;
+        }
+        if (flight) {
+            return flight;
+        }
+        if (isValidLat(ac.lat) && isValidLon(ac.lon)) {
+            return `POS-${Number(ac.lat).toFixed(4)}-${Number(ac.lon).toFixed(4)}`;
+        }
+        return null;
     }
 
     function normalizeCenter(center, fallback) {
@@ -2613,31 +2640,38 @@ if (is_dir($geojsonDir)) {
                 lastFeedUpdate = Date.now();
                 pollBackoffIndex = 0;
                 const hasUpstream = data.upstream_http !== null && data.upstream_http !== undefined;
-                const upstreamBad = hasUpstream && Number(data.upstream_http) !== 200;
+                const upstreamBad = hasUpstream && Number(data.upstream_http) >= 400;
                 const hasError = data.error !== null && data.error !== undefined && data.error !== '';
                 const cacheStale = data.cache_stale === true;
                 let feedStatus = 'OK';
                 if (cacheStale) {
-                    feedStatus = 'DEGRADED (CACHE)';
+                    feedStatus = 'DEGRADED';
                 } else if (hasError || upstreamBad) {
                     feedStatus = 'ERROR';
                 }
                 const warningMessage = feedStatus === 'OK'
                     ? ''
-                    : (hasError ? data.error : (upstreamBad ? `Upstream HTTP ${data.upstream_http}` : 'Feed cache stale.'));
+                    : (cacheStale ? 'Feed cache stale.' : (hasError ? data.error : `Upstream HTTP ${data.upstream_http}`));
                 updateFeedStatus(feedStatus, warningMessage);
                 const seenIds = new Set();
                 const now = Date.now();
                 const missingGraceMs = Math.max(6000, (settings.poll_interval_ms || 1500) * 6);
                 (data.ac || []).forEach(ac => {
-                    if (!ac || !isValidLat(ac.lat) || !isValidLon(ac.lon)) {
+                    if (!ac) {
                         return;
                     }
+                    const lat = coerceNumber(ac.lat);
+                    const lon = coerceNumber(ac.lon);
+                    if (lat === null || lon === null || !isValidLat(lat) || !isValidLon(lon)) {
+                        return;
+                    }
+                    ac.lat = lat;
+                    ac.lon = lon;
+                    ac.hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid) || null;
                     const flightId = buildAircraftId(ac);
                     if (!flightId) {
                         return;
                     }
-                    ac.hex = normalizeIdPart(ac.hex) || null;
                     ac._id = flightId;
                     seenIds.add(flightId);
                     const previous = flights[flightId] || {};
