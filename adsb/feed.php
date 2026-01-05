@@ -556,7 +556,6 @@ if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) {
 
 updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, null);
 
-$firPolygons = loadGeojsonPolygons(__DIR__ . '/data/fir-limits.geojson');
 $mexPolygons = loadGeojsonPolygons(__DIR__ . '/data/mex-border.geojson');
 
 $filteredByHex = [];
@@ -571,8 +570,6 @@ $feedLat = (float)$lat;
 $feedLon = (float)$lon;
 $uiLat = (float)$storedSettings['ui_center']['lat'];
 $uiLon = (float)$storedSettings['ui_center']['lon'];
-$airportInsideFir = $firPolygons ? pointInPolygons($feedLat, $feedLon, $firPolygons) : false;
-$useFirFilter = $firPolygons && $airportInsideFir;
 $borderLat = (float)($config['border_lat'] ?? 0.0);
 $northBufferNm = (float)($config['north_buffer_nm'] ?? 10.0);
 foreach ($data['ac'] as $ac) {
@@ -641,10 +638,6 @@ foreach ($data['ac'] as $ac) {
         }
     }
 
-    if ($useFirFilter && !pointInPolygons($acLat, $acLon, $firPolygons)) {
-        logFilterDiscard($filterLogger, $entry, 'fir_outside');
-        continue;
-    }
     if ($mexPolygons) {
         $insideMex = pointInPolygons($acLat, $acLon, $mexPolygons);
         if (!$insideMex) {
