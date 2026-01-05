@@ -12,14 +12,14 @@ $defaults = [
         'icao' => $config['airport']['icao'],
     ],
     'feed_center' => [
-        'lat' => (float)$config['airport']['lat'],
-        'lon' => (float)$config['airport']['lon'],
+        'lat' => (float)($config['feed_center']['lat'] ?? $config['airport']['lat']),
+        'lon' => (float)($config['feed_center']['lon'] ?? $config['airport']['lon']),
+        'radius_nm' => (float)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250),
     ],
     'ui_center' => [
         'lat' => (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541),
         'lon' => (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97),
     ],
-    'radius_nm' => 250,
     'poll_interval_ms' => (int)$config['poll_interval_ms'],
     'rings' => [
         'distances' => [50, 100, 150, 200, 250],
@@ -56,7 +56,6 @@ $defaults = [
             'dash' => '',
         ],
     ],
-    'defaults_version' => (int)($config['settings_version'] ?? 1),
 ];
 
 function ensureDatabase(string $dbPath): PDO
@@ -94,7 +93,16 @@ function normalizeHexColor($value, string $fallback): string
     return $fallback;
 }
 
-function normalizeSettings(array $input, array $base): array
+function fixedFeedCenter(array $config): array
+{
+    return [
+        'lat' => (float)($config['feed_center']['lat'] ?? $config['airport']['lat']),
+        'lon' => (float)($config['feed_center']['lon'] ?? $config['airport']['lon']),
+        'radius_nm' => (float)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250),
+    ];
+}
+
+function normalizeSettings(array $input, array $base, array $config): array
 {
     $settings = $base;
 
@@ -103,16 +111,7 @@ function normalizeSettings(array $input, array $base): array
         if (preg_match('/^[A-Z0-9]{3,4}$/', $icao)) {
             $settings['airport']['icao'] = $icao;
         }
-        if (!isset($input['feed_center'])) {
-            $lat = filter_var($input['airport']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
-            $lon = filter_var($input['airport']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
-            if ($lat !== false && $lat >= -90 && $lat <= 90) {
-                $settings['feed_center']['lat'] = (float)$lat;
-            }
-            if ($lon !== false && $lon >= -180 && $lon <= 180) {
-                $settings['feed_center']['lon'] = (float)$lon;
-            }
-        }
+        // feed_center is fixed; do not accept airport lat/lon overrides.
     }
 
     if (isset($input['feed_center']) && is_array($input['feed_center'])) {
@@ -123,6 +122,10 @@ function normalizeSettings(array $input, array $base): array
         }
         if ($lon !== false && $lon >= -180 && $lon <= 180) {
             $settings['feed_center']['lon'] = (float)$lon;
+        }
+        $radius = filter_var($input['feed_center']['radius_nm'] ?? null, FILTER_VALIDATE_FLOAT);
+        if ($radius !== false && $radius > 0) {
+            $settings['feed_center']['radius_nm'] = min(250, (float)$radius);
         }
     }
 
@@ -144,9 +147,9 @@ function normalizeSettings(array $input, array $base): array
         }
     }
 
-    $radius = filter_var($input['radius_nm'] ?? null, FILTER_VALIDATE_FLOAT);
-    if ($radius !== false && $radius > 0) {
-        $settings['radius_nm'] = min(250, (float)$radius);
+    $legacyRadius = filter_var($input['radius_nm'] ?? null, FILTER_VALIDATE_FLOAT);
+    if ($legacyRadius !== false && $legacyRadius > 0) {
+        $settings['feed_center']['radius_nm'] = min(250, (float)$legacyRadius);
     }
     $pollInterval = filter_var($input['poll_interval_ms'] ?? null, FILTER_VALIDATE_INT);
     if ($pollInterval !== false && $pollInterval >= 500 && $pollInterval <= 5000) {
@@ -250,19 +253,11 @@ function normalizeSettings(array $input, array $base): array
         }
     }
 
-    return $settings;
-}
+    $fixed = fixedFeedCenter($config);
+    $settings['feed_center']['lat'] = $fixed['lat'];
+    $settings['feed_center']['lon'] = $fixed['lon'];
+    $settings['feed_center']['radius_nm'] = $fixed['radius_nm'];
 
-function applyDefaultsVersion(array $settings, array $defaults): array
-{
-    $currentVersion = (int)($defaults['defaults_version'] ?? 1);
-    $storedVersion = isset($settings['defaults_version']) ? (int)$settings['defaults_version'] : 0;
-    if ($storedVersion < $currentVersion) {
-        $settings['airport'] = $defaults['airport'];
-        $settings['feed_center'] = $defaults['feed_center'];
-        $settings['ui_center'] = $defaults['ui_center'];
-        $settings['defaults_version'] = $currentVersion;
-    }
     return $settings;
 }
 
@@ -289,9 +284,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $stored = $decoded;
         }
     }
-    $settings = normalizeSettings($stored, $defaults);
-    $settings = applyDefaultsVersion($settings, $defaults);
-    if (!$row || ($settings['defaults_version'] ?? 0) !== ($stored['defaults_version'] ?? 0)) {
+    $settings = normalizeSettings($stored, $defaults, $config);
+    $fixed = fixedFeedCenter($config);
+    $needsSeed = false;
+    if (empty($stored['ui_center']) || !is_array($stored['ui_center'])) {
+        $settings['ui_center'] = $defaults['ui_center'];
+        $needsSeed = true;
+    }
+    if (
+        empty($stored['feed_center'])
+        || !is_array($stored['feed_center'])
+        || (float)($stored['feed_center']['lat'] ?? 0) !== $fixed['lat']
+        || (float)($stored['feed_center']['lon'] ?? 0) !== $fixed['lon']
+        || (float)($stored['feed_center']['radius_nm'] ?? 0) !== $fixed['radius_nm']
+    ) {
+        $settings['feed_center'] = $fixed;
+        $needsSeed = true;
+    }
+    if (!$row || $needsSeed) {
         $stmt = $pdo->prepare('INSERT INTO settings (id, data, updated_at) VALUES (1, :data, :updated_at)
             ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at');
         $stmt->execute([
@@ -321,12 +331,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stored = $decoded;
         }
     }
-    $current = normalizeSettings($stored, $defaults);
-    $settings = normalizeSettings($input, $current);
-    $settings['defaults_version'] = max(
-        (int)($settings['defaults_version'] ?? 0),
-        (int)($defaults['defaults_version'] ?? 1)
-    );
+    $current = normalizeSettings($stored, $defaults, $config);
+    $settings = normalizeSettings($input, $current, $config);
     $stmt = $pdo->prepare('INSERT INTO settings (id, data, updated_at) VALUES (1, :data, :updated_at)
         ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at');
     $stmt->execute([
