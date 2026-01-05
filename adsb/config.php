@@ -12,7 +12,12 @@ return [
         'lat' => 29.8839810,
         'lon' => -114.0747826,
     ],
-    // Display center (range rings + map center) defaults to MMTJ.
+    // UI center (range rings + BRL/distance calculations) defaults to MMTJ.
+    'ui_center' => [
+        'lat' => 32.541,
+        'lon' => -116.97,
+    ],
+    // Legacy display center (deprecated: use ui_center).
     'display_center' => [
         'lat' => 32.541,
         'lon' => -116.97,
