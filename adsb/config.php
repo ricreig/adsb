@@ -70,20 +70,20 @@ return [
 
     // Hard coded latitude of the US–Mexico border near Tijuana.  Aircraft
     // north of this latitude plus the `north_buffer_nm` (converted to
-    // degrees) are hidden from the display.  This prevents clutter from
-    // traffic well into US airspace while still showing coastal traffic.
-    'border_lat' => 32.542,
+    // degrees) are hidden from the display. Set to 0 to disable this
+    // filtering.
+    'border_lat' => 0.0,
 
-    // Toggle filtering based on the Mexico border GeoJSON. Disable this if
-    // the deployment is outside Mexico and you want to keep all traffic.
-    'mex_border_filter_enabled' => true,
+    // Toggle filtering based on the Mexico border GeoJSON. Keep disabled to
+    // show all traffic.
+    'mex_border_filter_enabled' => false,
     // Buffer outside Mexico (nautical miles) to keep when using
     // data/mex-border.geojson.
     'mex_border_buffer_nm' => 10,
 
     // Buffer north of the border in nautical miles.  Aircraft further north
     // than border_lat + (north_buffer_nm / 60) degrees will be filtered.
-    'north_buffer_nm' => 10,
+    'north_buffer_nm' => 0,
 
     // Directory where geo‑spatial layers reside.  Each GeoJSON file in this
     // directory will be exposed through the index page.  See the
