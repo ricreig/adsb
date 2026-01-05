@@ -15,9 +15,9 @@ $defaults = [
         'lat' => (float)$config['airport']['lat'],
         'lon' => (float)$config['airport']['lon'],
     ],
-    'display_center' => [
-        'lat' => (float)($config['display_center']['lat'] ?? 32.541),
-        'lon' => (float)($config['display_center']['lon'] ?? -116.97),
+    'ui_center' => [
+        'lat' => (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541),
+        'lon' => (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97),
     ],
     'radius_nm' => 250,
     'poll_interval_ms' => (int)$config['poll_interval_ms'],
@@ -125,14 +125,21 @@ function normalizeSettings(array $input, array $base): array
         }
     }
 
-    if (isset($input['display_center']) && is_array($input['display_center'])) {
-        $lat = filter_var($input['display_center']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
-        $lon = filter_var($input['display_center']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+    $uiInput = null;
+    if (isset($input['ui_center']) && is_array($input['ui_center'])) {
+        $uiInput = $input['ui_center'];
+    } elseif (isset($input['display_center']) && is_array($input['display_center'])) {
+        $uiInput = $input['display_center'];
+    }
+
+    if ($uiInput !== null) {
+        $lat = filter_var($uiInput['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+        $lon = filter_var($uiInput['lon'] ?? null, FILTER_VALIDATE_FLOAT);
         if ($lat !== false && $lat >= -90 && $lat <= 90) {
-            $settings['display_center']['lat'] = (float)$lat;
+            $settings['ui_center']['lat'] = (float)$lat;
         }
         if ($lon !== false && $lon >= -180 && $lon <= 180) {
-            $settings['display_center']['lon'] = (float)$lon;
+            $settings['ui_center']['lon'] = (float)$lon;
         }
     }
 

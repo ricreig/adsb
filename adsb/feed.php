@@ -27,9 +27,9 @@ function loadStoredSettings(array $config): array
             'lat' => (float)$config['airport']['lat'],
             'lon' => (float)$config['airport']['lon'],
         ],
-        'display_center' => [
-            'lat' => (float)($config['display_center']['lat'] ?? 32.541),
-            'lon' => (float)($config['display_center']['lon'] ?? -116.97),
+        'ui_center' => [
+            'lat' => (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541),
+            'lon' => (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97),
         ],
         'radius_nm' => (float)$config['adsb_radius'],
     ];
@@ -58,14 +58,15 @@ function loadStoredSettings(array $config): array
                 if ($lon !== false && $lon >= -180 && $lon <= 180) {
                     $settings['feed_center']['lon'] = (float)$lon;
                 }
-                if (isset($decoded['display_center']) && is_array($decoded['display_center'])) {
-                    $dlat = filter_var($decoded['display_center']['lat'] ?? null, FILTER_VALIDATE_FLOAT);
-                    $dlon = filter_var($decoded['display_center']['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+                $ui = $decoded['ui_center'] ?? $decoded['display_center'] ?? null;
+                if (isset($ui) && is_array($ui)) {
+                    $dlat = filter_var($ui['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+                    $dlon = filter_var($ui['lon'] ?? null, FILTER_VALIDATE_FLOAT);
                     if ($dlat !== false && $dlat >= -90 && $dlat <= 90) {
-                        $settings['display_center']['lat'] = (float)$dlat;
+                        $settings['ui_center']['lat'] = (float)$dlat;
                     }
                     if ($dlon !== false && $dlon >= -180 && $dlon <= 180) {
-                        $settings['display_center']['lon'] = (float)$dlon;
+                        $settings['ui_center']['lon'] = (float)$dlon;
                     }
                 }
                 if ($radius !== false && $radius > 0 && $radius <= 250) {
@@ -519,8 +520,8 @@ $filterLogger = static function (string $message): void {
 };
 $feedLat = (float)$lat;
 $feedLon = (float)$lon;
-$displayLat = (float)$storedSettings['display_center']['lat'];
-$displayLon = (float)$storedSettings['display_center']['lon'];
+$uiLat = (float)$storedSettings['ui_center']['lat'];
+$uiLon = (float)$storedSettings['ui_center']['lon'];
 $airportInsideFir = $firPolygons ? pointInPolygons($feedLat, $feedLon, $firPolygons) : false;
 $useFirFilter = $firPolygons && $airportInsideFir;
 $borderLat = (float)($config['border_lat'] ?? 0.0);
@@ -558,7 +559,7 @@ foreach ($data['ac'] as $ac) {
             $emergency = null;
         }
     }
-    $displayDistance = haversineNm($acLat, $acLon, $displayLat, $displayLon);
+    $displayDistance = haversineNm($acLat, $acLon, $uiLat, $uiLon);
     $distanceRounded = round($displayDistance, 1);
 
     $entry = [

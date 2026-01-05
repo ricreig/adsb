@@ -362,6 +362,19 @@ if (is_dir($geojsonDir)) {
         body.sidebar-collapsed #feedStatus {
             right: 10px !important;
         }
+        #debugInfo {
+            position: absolute;
+            left: 10px;
+            bottom: 10px;
+            z-index: 1200;
+            background: rgba(14, 21, 32, 0.85);
+            color: #facc15;
+            padding: 4px 6px;
+            border: 1px solid #facc15;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+        }
         #errorOverlay {
             position: fixed;
             top: 70px;
@@ -470,11 +483,11 @@ if (is_dir($geojsonDir)) {
             <label style="display:block;margin-bottom:4px;">Feed Center Lon
                 <input type="number" id="feedCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['airport']['lon']); ?>" style="width:90px;margin-left:4px;"/>
             </label>
-            <label style="display:block;margin-bottom:4px;">Display Center Lat
-                <input type="number" id="displayCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['display_center']['lat'] ?? 32.541); ?>" style="width:90px;margin-left:4px;"/>
+            <label style="display:block;margin-bottom:4px;">UI Center Lat
+                <input type="number" id="displayCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>" style="width:90px;margin-left:4px;"/>
             </label>
-            <label style="display:block;margin-bottom:4px;">Display Center Lon
-                <input type="number" id="displayCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['display_center']['lon'] ?? -116.97); ?>" style="width:90px;margin-left:4px;"/>
+            <label style="display:block;margin-bottom:4px;">UI Center Lon
+                <input type="number" id="displayCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>" style="width:90px;margin-left:4px;"/>
             </label>
             <label style="display:block;margin-bottom:4px;">Radius (NM, max 250)
                 <input type="number" id="radiusInput" min="1" max="250" value="250" style="width:80px;margin-left:4px;"/>
@@ -614,6 +627,15 @@ if (is_dir($geojsonDir)) {
     const errorOverlay = document.getElementById('errorOverlay');
     const diagnosticsContent = document.getElementById('diagnosticsContent');
     const diagnosticsClose = document.getElementById('diagnosticsClose');
+    const debugMode = new URLSearchParams(window.location.search).has('debug')
+        || localStorage.getItem('adsb_debug') === '1';
+    let debugInfo = null;
+    if (debugMode) {
+        debugInfo = document.createElement('div');
+        debugInfo.id = 'debugInfo';
+        debugInfo.textContent = 'markers: 0 · tracks: 0 · labels: 0 · polling: 0';
+        document.body.appendChild(debugInfo);
+    }
     const errorLog = [];
     let diagnosticsDismissed = false;
     const diagnostics = {
@@ -803,8 +825,8 @@ if (is_dir($geojsonDir)) {
         attributionControl: true,
         preferCanvas: true,
     }).setView([
-        <?php echo (float)($config['display_center']['lat'] ?? 32.541); ?>,
-        <?php echo (float)($config['display_center']['lon'] ?? -116.97); ?>
+        <?php echo (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>,
+        <?php echo (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>
     ], 8);
     const tileStatus = document.getElementById('tileStatus');
     map.createPane('tracks');
@@ -1048,11 +1070,11 @@ if (is_dir($geojsonDir)) {
         };
         if (settings.navpoints.zone === 'mmtj-120') {
             const deltaLat = 120 / 60;
-            const deltaLon = deltaLat / Math.cos(settings.display_center.lat * Math.PI / 180);
-            north = Math.min(north, settings.display_center.lat + deltaLat);
-            south = Math.max(south, settings.display_center.lat - deltaLat);
-            east = Math.min(east, settings.display_center.lon + deltaLon);
-            west = Math.max(west, settings.display_center.lon - deltaLon);
+            const deltaLon = deltaLat / Math.cos(settings.ui_center.lat * Math.PI / 180);
+            north = Math.min(north, settings.ui_center.lat + deltaLat);
+            south = Math.max(south, settings.ui_center.lat - deltaLat);
+            east = Math.min(east, settings.ui_center.lon + deltaLon);
+            west = Math.max(west, settings.ui_center.lon - deltaLon);
         } else {
             const zone = zones[settings.navpoints.zone] || zones.all;
             north = Math.min(north, zone.north);
@@ -1131,7 +1153,7 @@ if (is_dir($geojsonDir)) {
     }
 
     // Flight data and interactions
-    const flights = {}; // keyed by hex
+    const flights = {}; // keyed by flight id
     const flightMarkers = {}; // marker/vector/track/history/lastUpdate
     const flightStates = {};
     let selectedFlight = null;
@@ -1157,6 +1179,17 @@ if (is_dir($geojsonDir)) {
     let routePlan = null;
     let lastStateSync = 0;
 
+    function updateDebugInfo() {
+        if (!debugInfo) {
+            return;
+        }
+        const markerCount = Object.keys(flightMarkers).length;
+        const trackCount = Object.values(flightMarkers).filter(entry => entry.track).length;
+        const labelCount = Object.values(flightMarkers).filter(entry => entry.marker && entry.marker.getTooltip()).length;
+        const polling = pollTimer ? 1 : 0;
+        debugInfo.textContent = `markers: ${markerCount} · tracks: ${trackCount} · labels: ${labelCount} · polling: ${polling}`;
+    }
+
     const defaultSettings = {
         airport: {
             icao: '<?php echo addslashes($config['airport']['icao']); ?>',
@@ -1165,9 +1198,9 @@ if (is_dir($geojsonDir)) {
             lat: <?php echo (float)$config['airport']['lat']; ?>,
             lon: <?php echo (float)$config['airport']['lon']; ?>,
         },
-        display_center: {
-            lat: <?php echo (float)($config['display_center']['lat'] ?? 32.541); ?>,
-            lon: <?php echo (float)($config['display_center']['lon'] ?? -116.97); ?>,
+        ui_center: {
+            lat: <?php echo (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>,
+            lon: <?php echo (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>,
         },
         radius_nm: 250,
         poll_interval_ms: <?php echo (int)$config['poll_interval_ms']; ?>,
@@ -1220,7 +1253,7 @@ if (is_dir($geojsonDir)) {
         ensureCenters();
         document.documentElement.style.setProperty('--label-size', settings.labels.font_size);
         document.documentElement.style.setProperty('--label-color', settings.labels.color);
-        map.setView([settings.display_center.lat, settings.display_center.lon], map.getZoom());
+        map.setView([settings.ui_center.lat, settings.ui_center.lon], map.getZoom());
         updateRangeRings();
         switchBasemap(settings.display && settings.display.basemap ? settings.display.basemap : 'dark');
         updateLabelVisibility();
@@ -1234,7 +1267,7 @@ if (is_dir($geojsonDir)) {
         rangeRings = [];
         const dashArray = settings.rings.style.dash || '';
         settings.rings.distances.forEach(dist => {
-            const circle = L.circle([settings.display_center.lat, settings.display_center.lon], {
+            const circle = L.circle([settings.ui_center.lat, settings.ui_center.lon], {
                 color: settings.rings.style.color,
                 weight: settings.rings.style.weight,
                 fill: false,
@@ -1299,6 +1332,39 @@ if (is_dir($geojsonDir)) {
         return Number.isFinite(lon) && lon >= -180 && lon <= 180;
     }
 
+    function normalizeIdPart(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        const text = String(value).trim().toUpperCase();
+        return text;
+    }
+
+    function buildAircraftId(ac) {
+        const hex = normalizeIdPart(ac.hex);
+        if (hex) {
+            return hex;
+        }
+        const icao = normalizeIdPart(ac.icao || ac.icao24);
+        const reg = normalizeIdPart(ac.reg || ac.registration || ac.r);
+        const flight = normalizeIdPart(ac.flight);
+        const parts = [icao, reg, flight].filter(Boolean);
+        if (parts.length) {
+            return parts.join('|');
+        }
+        const addr = normalizeIdPart(ac.addr || ac.hexid);
+        if (addr) {
+            return addr;
+        }
+        if (isValidLat(ac.lat) && isValidLon(ac.lon)) {
+            const lat = Number(ac.lat).toFixed(4);
+            const lon = Number(ac.lon).toFixed(4);
+            const alt = Number.isFinite(ac.alt) ? Math.round(ac.alt) : '';
+            return `POS:${lat}|${lon}${alt !== '' ? `|${alt}` : ''}`;
+        }
+        return null;
+    }
+
     function normalizeCenter(center, fallback) {
         if (!center || !isValidLat(center.lat) || !isValidLon(center.lon)) {
             return { ...fallback };
@@ -1311,9 +1377,9 @@ if (is_dir($geojsonDir)) {
             settings.feed_center || settings.airport,
             defaultSettings.feed_center
         );
-        settings.display_center = normalizeCenter(
-            settings.display_center,
-            defaultSettings.display_center
+        settings.ui_center = normalizeCenter(
+            settings.ui_center || settings.display_center,
+            defaultSettings.ui_center
         );
     }
 
@@ -1451,19 +1517,22 @@ if (is_dir($geojsonDir)) {
         }
     }
 
-    function saveNote(hex, note) {
-        if (!hex) {
+    function saveNote(flightId, note) {
+        if (!flightId) {
             return;
         }
         if (note) {
-            noteStore[hex] = note;
-            stripNotes[hex] = note;
+            noteStore[flightId] = note;
+            stripNotes[flightId] = note;
         } else {
-            delete noteStore[hex];
-            delete stripNotes[hex];
+            delete noteStore[flightId];
+            delete stripNotes[flightId];
         }
         persistNoteStore(noteStore);
-        persistStrip({ hex, note });
+        const hex = flights[flightId]?.hex;
+        if (hex) {
+            persistStrip({ hex, note });
+        }
     }
 
     function loadStrips() {
@@ -1481,7 +1550,7 @@ if (is_dir($geojsonDir)) {
                     stripNotes[strip.hex] = strip.note || '';
                     stripStatuses[strip.hex] = strip.status || 'normal';
                     flightStates[strip.hex] = strip.status || flightStates[strip.hex] || 'normal';
-                    stripDataCache[strip.hex] = strip;
+                    stripDataCache[strip.hex] = { ...strip, _id: strip.hex };
                 });
                 updateStrips();
             })
@@ -1506,7 +1575,7 @@ if (is_dir($geojsonDir)) {
                         stripNotes[entry.hex] = entry.note || '';
                         stripStatuses[entry.hex] = entry.status || 'normal';
                         flightStates[entry.hex] = entry.status || flightStates[entry.hex] || 'normal';
-                        stripDataCache[entry.hex] = entry;
+                        stripDataCache[entry.hex] = { ...entry, _id: entry.hex };
                     });
                 }
             })
@@ -1530,31 +1599,34 @@ if (is_dir($geojsonDir)) {
             .catch(() => {});
     }
 
-    function ensureStripForFlight(hex) {
-        if (!hex) {
+    function ensureStripForFlight(flightId) {
+        if (!flightId) {
             return;
         }
-        if (!stripOrder.includes(hex)) {
-            stripOrder.push(hex);
+        if (!stripOrder.includes(flightId)) {
+            stripOrder.push(flightId);
         }
-        const status = flightStates[hex] || stripStatuses[hex] || 'normal';
-        const note = flights[hex]?.note || stripNotes[hex] || '';
-        persistStrip({
-            hex,
-            status,
-            note,
-        });
+        const status = flightStates[flightId] || stripStatuses[flightId] || 'normal';
+        const note = flights[flightId]?.note || stripNotes[flightId] || '';
+        const hex = flights[flightId]?.hex;
+        if (hex) {
+            persistStrip({
+                hex,
+                status,
+                note,
+            });
+        }
     }
 
-    function updateStripDetails(hex) {
-        if (!hex) {
+    function updateStripDetails(flightId) {
+        if (!flightId) {
             stripDetails.textContent = 'Selecciona una tira para ver detalles.';
             return;
         }
-        const ac = flights[hex] || {};
-        const status = getFlightStatus(hex);
-        const note = ac.note || stripNotes[hex] || '';
-        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : hex;
+        const ac = flights[flightId] || {};
+        const status = getFlightStatus(flightId);
+        const note = ac.note || stripNotes[flightId] || '';
+        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || flightId);
         const alt = ac.alt ? `${ac.alt}FT` : '---';
         const gs = ac.gs ? `${ac.gs}KT` : '---';
         const trk = ac.track ? `${ac.track}°` : '---';
@@ -1587,15 +1659,17 @@ if (is_dir($geojsonDir)) {
             return;
         }
         lastStateSync = now;
-        const states = Object.values(flights).map(ac => ({
-            hex: ac.hex,
-            lat: ac.lat,
-            lon: ac.lon,
-            alt: ac.alt,
-            track: ac.track,
-            gs: ac.gs,
-            status: getFlightStatus(ac.hex),
-        }));
+        const states = Object.values(flights)
+            .filter(ac => ac && ac.hex)
+            .map(ac => ({
+                hex: ac.hex,
+                lat: ac.lat,
+                lon: ac.lon,
+                alt: ac.alt,
+                track: ac.track,
+                gs: ac.gs,
+                status: getFlightStatus(ac._id),
+            }));
         if (!states.length) {
             return;
         }
@@ -1647,7 +1721,7 @@ if (is_dir($geojsonDir)) {
         if (!settings.labels.show_labels) {
             return false;
         }
-        if (selectedFlight && selectedFlight === ac.hex) {
+        if (selectedFlight && selectedFlight === ac._id) {
             return true;
         }
         return map.getZoom() >= (settings.labels.min_zoom || 7);
@@ -1680,10 +1754,10 @@ if (is_dir($geojsonDir)) {
         if (!el) {
             return;
         }
-        el.classList.toggle('highlight', selectedFlight === ac.hex || isEmergency(ac));
+        el.classList.toggle('highlight', selectedFlight === ac._id || isEmergency(ac));
     }
 
-    function bindLabelNoteEditor(marker, hex) {
+    function bindLabelNoteEditor(marker, flightId) {
         const tooltip = marker.getTooltip();
         if (!tooltip) {
             return;
@@ -1700,7 +1774,7 @@ if (is_dir($geojsonDir)) {
         noteEl.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            const ac = flights[hex];
+            const ac = flights[flightId];
             if (!ac) {
                 return;
             }
@@ -1720,16 +1794,16 @@ if (is_dir($geojsonDir)) {
                 if (commit) {
                     const updated = noteEl.textContent.trim();
                     ac.note = updated;
-                    saveNote(hex, updated);
+                    saveNote(flightId, updated);
                 } else {
                     noteEl.textContent = ac.note || '---';
                 }
-                const markerData = flightMarkers[hex];
+                const markerData = flightMarkers[flightId];
                 if (markerData) {
                     markerData.marker.setTooltipContent(labelFromAc(ac));
                     updateTooltipClass(markerData.marker, ac);
                 }
-                if (selectedFlight === hex) {
+                if (selectedFlight === flightId) {
                     const noteField = document.getElementById('noteField');
                     if (noteField) {
                         noteField.value = ac.note || '';
@@ -1751,27 +1825,26 @@ if (is_dir($geojsonDir)) {
         });
     }
 
-    function shouldAppendTrackPoint(history, ac) {
-        if (!history.length) {
-            return true;
-        }
-        const last = history[history.length - 1];
-        const delta = distanceNm(last.lat, last.lon, ac.lat, ac.lon);
-        const headingDelta = Math.abs(((ac.track || 0) - (last.track || 0) + 540) % 360 - 180);
-        return delta >= 0.2 || headingDelta >= 15;
-    }
-
     function updateTrackHistory(state, ac) {
         const now = Date.now();
         if (!state.history) {
             state.history = [];
         }
-        if (shouldAppendTrackPoint(state.history, ac)) {
+        if (!state.history.length) {
             state.history.push({ lat: ac.lat, lon: ac.lon, ts: now, track: ac.track || 0 });
+        } else {
+            const last = state.history[state.history.length - 1];
+            const delta = distanceNm(last.lat, last.lon, ac.lat, ac.lon);
+            const timeDelta = now - (last.ts || 0);
+            const movedEnough = delta >= 0.03;
+            const waitedLongEnough = timeDelta >= 10000;
+            if (movedEnough || waitedLongEnough) {
+                state.history.push({ lat: ac.lat, lon: ac.lon, ts: now, track: ac.track || 0 });
+            }
         }
         const cutoff = now - 5 * 60 * 1000;
         state.history = state.history.filter(pt => pt.ts >= cutoff);
-        const maxPoints = 35;
+        const maxPoints = 80;
         if (state.history.length > maxPoints) {
             state.history = state.history.slice(state.history.length - maxPoints);
         }
@@ -1779,7 +1852,10 @@ if (is_dir($geojsonDir)) {
     }
 
     function renderFlight(ac) {
-        const id = ac.hex;
+        const id = ac._id;
+        if (!id) {
+            return;
+        }
         const existing = flightMarkers[id];
         const pos = [ac.lat, ac.lon];
         const vectorLengthNm = 2; // minutes ahead – 2 minutes for short leader
@@ -1849,11 +1925,12 @@ if (is_dir($geojsonDir)) {
             });
             flightMarkers[id] = { marker, vector, track, history, lastUpdate: Date.now() };
         }
+        updateDebugInfo();
     }
 
     // Generate a label string for a track
     function labelFromAc(ac) {
-        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : ac.hex;
+        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || ac._id);
         const type = ac.type || ac.aircraft_type || '';
         const line1 = `${escapeHtml(callsign)}${type ? ` ${escapeHtml(type)}` : ''}`;
         const alt = settings.labels.show_alt && ac.alt !== null && ac.alt !== undefined ? `${ac.alt}FT` : 'ALT ---';
@@ -1871,7 +1948,7 @@ if (is_dir($geojsonDir)) {
         const line3 = `${vsText}  ${trkText}`;
         const sqk = settings.labels.show_sqk && ac.squawk ? `SQK ${ac.squawk}` : 'SQK ----';
         const note = ac.note ? escapeHtml(ac.note) : '---';
-        const line4 = `${sqk}  NOTE: <span class="label-note" data-hex="${escapeHtml(ac.hex || '')}">${note}</span>`;
+        const line4 = `${sqk}  NOTE: <span class="label-note" data-flight-id="${escapeHtml(ac._id || '')}">${note}</span>`;
         return [
             `<span class="label-line">${line1}</span>`,
             `<span class="label-line">${line2}</span>`,
@@ -1906,10 +1983,11 @@ if (is_dir($geojsonDir)) {
             flightInfoDiv.textContent = 'Click a flight to see details.';
             updateFlightPlanPanel(null);
         }
-        const stripEl = document.querySelector('.strip[data-hex="' + id + '"]');
+        const stripEl = document.querySelector('.strip[data-flight-id="' + id + '"]');
         if (stripEl && !stripOrder.includes(id)) {
             stripEl.remove();
         }
+        updateDebugInfo();
     }
 
     // Remove stale flights (not updated recently)
@@ -1929,7 +2007,8 @@ if (is_dir($geojsonDir)) {
 
     // Update flight strips in tray
     function buildStripHtml(ac, status) {
-        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : ac.hex;
+        const flightId = ac._id || ac.hex;
+        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || flightId);
         const alt = ac.alt ? `${ac.alt}FT` : '---';
         const gs = ac.gs ? `${ac.gs}KT` : '---';
         const trk = ac.track ? `${ac.track}°` : '---';
@@ -1940,7 +2019,7 @@ if (is_dir($geojsonDir)) {
         const origin = ac.origin || ac.orig || '';
         const dest = ac.destination || ac.dest || '';
         const eta = ac.eta || '';
-        const note = ac.note || stripNotes[ac.hex] || '';
+        const note = ac.note || stripNotes[flightId] || '';
         const statusLabel = status === 'assumed' ? 'ASUMIDA' : status === 'released' ? 'LIBERADA' : 'PENDIENTE';
         const routeSummary = ac.routeSummary || (origin || dest ? `${origin || '---'} → ${dest || '---'}` : 'Sin ruta disponible');
         const detailsPrimary = `
@@ -1977,26 +2056,26 @@ if (is_dir($geojsonDir)) {
         stripOrder = ordered;
 
         stripTray.querySelectorAll('.strip').forEach(strip => {
-            if (!stripOrder.includes(strip.dataset.hex)) {
+            if (!stripOrder.includes(strip.dataset.flightId)) {
                 strip.remove();
             }
         });
 
-        stripOrder.forEach((hex, index) => {
-            const ac = flights[hex] || stripDataCache[hex] || { hex };
-            let strip = document.querySelector('.strip[data-hex="' + hex + '"]');
+        stripOrder.forEach((flightId, index) => {
+            const ac = flights[flightId] || stripDataCache[flightId] || { _id: flightId, hex: flightId };
+            let strip = document.querySelector('.strip[data-flight-id="' + flightId + '"]');
             if (!strip) {
                 strip = document.createElement('div');
                 strip.className = 'strip';
-                strip.dataset.hex = hex;
+                strip.dataset.flightId = flightId;
                 strip.draggable = true;
                 strip.addEventListener('click', () => {
-                    selectedStrip = hex;
-                    updateStripDetails(hex);
-                    selectFlight(hex);
+                    selectedStrip = flightId;
+                    updateStripDetails(flightId);
+                    selectFlight(flightId);
                 });
                 strip.addEventListener('dragstart', event => {
-                    event.dataTransfer.setData('text/plain', hex);
+                    event.dataTransfer.setData('text/plain', flightId);
                     event.dataTransfer.effectAllowed = 'move';
                 });
                 strip.addEventListener('dragover', event => {
@@ -2006,11 +2085,11 @@ if (is_dir($geojsonDir)) {
                 strip.addEventListener('drop', event => {
                     event.preventDefault();
                     const draggedHex = event.dataTransfer.getData('text/plain');
-                    if (!draggedHex || draggedHex === hex) {
+                    if (!draggedHex || draggedHex === flightId) {
                         return;
                     }
                     const newOrder = stripOrder.filter(item => item !== draggedHex);
-                    const insertIndex = newOrder.indexOf(hex);
+                    const insertIndex = newOrder.indexOf(flightId);
                     newOrder.splice(insertIndex, 0, draggedHex);
                     stripOrder = newOrder;
                     updateStrips();
@@ -2018,11 +2097,11 @@ if (is_dir($geojsonDir)) {
                 });
                 stripTray.appendChild(strip);
             }
-            const status = getFlightStatus(hex);
+            const status = getFlightStatus(flightId);
             strip.classList.toggle('assumed', status === 'assumed');
             strip.classList.toggle('released', status === 'released');
             strip.classList.toggle('pending', status === 'normal');
-            strip.classList.toggle('selected', selectedFlight === hex || selectedStrip === hex);
+            strip.classList.toggle('selected', selectedFlight === flightId || selectedStrip === flightId);
             strip.innerHTML = buildStripHtml(ac, status);
             if (['7500','7600','7700'].includes(ac.squawk)) {
                 strip.style.background = '#8a0e0e';
@@ -2037,29 +2116,29 @@ if (is_dir($geojsonDir)) {
     }
 
     // Select a flight for detailed view and route display
-    function selectFlight(hex) {
-        const ac = flights[hex];
+    function selectFlight(flightId) {
+        const ac = flights[flightId];
         if (!ac) return;
-        selectedFlight = hex;
-        selectedStrip = hex;
-        ensureStripForFlight(hex);
-        updateStripDetails(hex);
+        selectedFlight = flightId;
+        selectedStrip = flightId;
+        ensureStripForFlight(flightId);
+        updateStripDetails(flightId);
         routePlan = null;
         clearRoute();
         // Highlight marker
         Object.keys(flightMarkers).forEach(id => {
             const m = flightMarkers[id].marker;
             const status = getFlightStatus(id);
-            const color = id === hex ? '#22d3ee' : flightColor(status);
+            const color = id === flightId ? '#22d3ee' : flightColor(status);
             updateMarkerIcon(m, color, status === 'released' ? 0.6 : 1);
             updateTooltipClass(m, flights[id] || {});
         });
         updateStrips();
         // Show details
         // Build details HTML
-        const status = getFlightStatus(hex);
+        const status = getFlightStatus(flightId);
         let html = '';
-        html += '<strong>CALLSIGN:</strong> ' + (ac.flight ? ac.flight.trim().toUpperCase() : ac.hex) + '<br>';
+        html += '<strong>CALLSIGN:</strong> ' + (ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || flightId)) + '<br>';
         html += '<strong>STATUS:</strong> ' + status.toUpperCase() + '<br>';
         html += '<strong>POS:</strong> ' + ac.lat.toFixed(4) + ', ' + ac.lon.toFixed(4) + '<br>';
         if (ac.alt) html += '<strong>ALT:</strong> ' + ac.alt + ' FT<br>';
@@ -2085,32 +2164,32 @@ if (is_dir($geojsonDir)) {
         flightInfoDiv.innerHTML = html;
         // Bind buttons
         document.getElementById('assumeBtn').addEventListener('click', () => {
-            assumeFlight(hex);
+            assumeFlight(flightId);
         });
         document.getElementById('releaseBtn').addEventListener('click', () => {
-            releaseFlight(hex);
+            releaseFlight(flightId);
         });
         document.getElementById('saveNoteBtn').addEventListener('click', () => {
             const text = document.getElementById('noteField').value.trim();
-            flights[hex].note = text;
-            saveNote(hex, text);
+            flights[flightId].note = text;
+            saveNote(flightId, text);
             // Immediately update tooltip with note
-            const existing = flightMarkers[hex];
+            const existing = flightMarkers[flightId];
             if (existing) {
-                existing.marker.setTooltipContent(labelFromAc(flights[hex]));
-                updateTooltipClass(existing.marker, flights[hex]);
+                existing.marker.setTooltipContent(labelFromAc(flights[flightId]));
+                updateTooltipClass(existing.marker, flights[flightId]);
             }
             updateStrips();
         });
         updateLabelVisibility();
-        updateFlightPlanPanel(hex);
+        updateFlightPlanPanel(flightId);
     }
 
     // Assume a flight (mark as assumed)
-    function assumeFlight(hex) {
-        flightStates[hex] = 'assumed';
-        stripStatuses[hex] = 'assumed';
-        const markerData = flightMarkers[hex];
+    function assumeFlight(flightId) {
+        flightStates[flightId] = 'assumed';
+        stripStatuses[flightId] = 'assumed';
+        const markerData = flightMarkers[flightId];
         if (markerData) {
             const color = flightColor('assumed');
             updateMarkerIcon(markerData.marker, color);
@@ -2119,24 +2198,27 @@ if (is_dir($geojsonDir)) {
                 markerData.track.setStyle({ color });
             }
         }
-        const strip = document.querySelector('.strip[data-hex="' + hex + '"]');
+        const strip = document.querySelector('.strip[data-flight-id="' + flightId + '"]');
         if (strip) {
             strip.classList.add('assumed');
             strip.classList.remove('released');
         }
         updateStrips();
         updateLabelVisibility();
-        if (selectedFlight === hex) {
-            selectFlight(hex);
+        if (selectedFlight === flightId) {
+            selectFlight(flightId);
         }
-        persistStrip({ hex, status: 'assumed', note: flights[hex]?.note || stripNotes[hex] || '' });
+        const hex = flights[flightId]?.hex;
+        if (hex) {
+            persistStrip({ hex, status: 'assumed', note: flights[flightId]?.note || stripNotes[flightId] || '' });
+        }
     }
 
     // Release a flight (mark as released)
-    function releaseFlight(hex) {
-        flightStates[hex] = 'released';
-        stripStatuses[hex] = 'released';
-        const markerData = flightMarkers[hex];
+    function releaseFlight(flightId) {
+        flightStates[flightId] = 'released';
+        stripStatuses[flightId] = 'released';
+        const markerData = flightMarkers[flightId];
         if (markerData) {
             const color = flightColor('released');
             updateMarkerIcon(markerData.marker, color, 0.6);
@@ -2145,17 +2227,20 @@ if (is_dir($geojsonDir)) {
                 markerData.track.setStyle({ color, opacity: 0.3 });
             }
         }
-        const strip = document.querySelector('.strip[data-hex="' + hex + '"]');
+        const strip = document.querySelector('.strip[data-flight-id="' + flightId + '"]');
         if (strip) {
             strip.classList.remove('assumed');
             strip.classList.add('released');
         }
         updateStrips();
         updateLabelVisibility();
-        if (selectedFlight === hex) {
-            selectFlight(hex);
+        if (selectedFlight === flightId) {
+            selectFlight(flightId);
         }
-        persistStrip({ hex, status: 'released', note: flights[hex]?.note || stripNotes[hex] || '' });
+        const hex = flights[flightId]?.hex;
+        if (hex) {
+            persistStrip({ hex, status: 'released', note: flights[flightId]?.note || stripNotes[flightId] || '' });
+        }
     }
 
     function clearRoute() {
@@ -2183,8 +2268,8 @@ if (is_dir($geojsonDir)) {
         routeToggleBtn.textContent = 'Route ON';
     }
 
-    function loadFlightPlan(hex) {
-        const ac = flights[hex];
+    function loadFlightPlan(flightId) {
+        const ac = flights[flightId];
         if (!ac) {
             return Promise.resolve(null);
         }
@@ -2212,7 +2297,7 @@ if (is_dir($geojsonDir)) {
                 const fixInfo = fixCount ? `Fixes: ${fixCount}` : 'Fixes: 0';
                 ac.routeSummary = origin || dest ? `${origin || '---'} → ${dest || '---'} (${fixInfo})` : fixInfo;
                 updateStrips();
-                updateFlightPlanPanel(hex);
+                updateFlightPlanPanel(flightId);
                 return data;
             })
             .catch(() => {
@@ -2223,8 +2308,8 @@ if (is_dir($geojsonDir)) {
             });
     }
 
-    function updateFlightPlanPanel(hex) {
-        const ac = flights[hex];
+    function updateFlightPlanPanel(flightId) {
+        const ac = flights[flightId];
         if (!ac) {
             flightPlanSummary.textContent = 'Selecciona un vuelo para ver el plan.';
             routeToggleBtn.disabled = true;
@@ -2367,7 +2452,7 @@ if (is_dir($geojsonDir)) {
                 ensureStripForFlight(selectedFlight);
             }
         } else if (brlMode === 'airport') {
-            brlOrigin = [settings.display_center.lat, settings.display_center.lon];
+            brlOrigin = [settings.ui_center.lat, settings.ui_center.lon];
             brlTracking = true;
             showNotification('AP BRL activo: clic para destino (origen aeropuerto).');
             if (selectedFlight) {
@@ -2403,7 +2488,7 @@ if (is_dir($geojsonDir)) {
     });
     brlClear.addEventListener('click', () => {
         clearBrl();
-        brlOrigin = brlMode === 'airport' ? [settings.display_center.lat, settings.display_center.lon] : null;
+        brlOrigin = brlMode === 'airport' ? [settings.ui_center.lat, settings.ui_center.lon] : null;
         brlTracking = brlMode === 'airport';
         showNotification('BRL borrado');
     });
@@ -2482,10 +2567,10 @@ if (is_dir($geojsonDir)) {
             + '&radius_nm=' + encodeURIComponent(radius);
         fetchJson(url, { signal: pollAbort.signal }, 'Feed request')
             .then(data => {
-                if (!data || !data.ok) {
+                if (!data || data.ok !== true) {
                     const message = (data && data.error) ? data.error : 'Upstream feed unavailable.';
-                    updateFeedStatus('DEGRADED', message);
-                    reportError('Feed degraded', message);
+                    updateFeedStatus('ERROR', message);
+                    reportError('Feed error', message);
                     pollBackoffIndex = Math.min(pollBackoffIndex + 1, pollBackoffSteps.length - 1);
                     return;
                 }
@@ -2493,39 +2578,43 @@ if (is_dir($geojsonDir)) {
                 pollBackoffIndex = 0;
                 const hasUpstream = data.upstream_http !== null && data.upstream_http !== undefined;
                 const upstreamBad = hasUpstream && Number(data.upstream_http) !== 200;
-                const feedOk = data.error === null
-                    && data.cache_stale === false
-                    && !upstreamBad;
-                const degraded = !feedOk;
-                const feedStatus = degraded
-                    ? (data.cache_stale ? 'DEGRADED (CACHE)' : 'DEGRADED')
-                    : 'OK';
-                const warningMessage = !feedOk
-                    ? (data.error || (upstreamBad ? `Upstream HTTP ${data.upstream_http}` : 'Feed degraded.'))
-                    : '';
+                const hasError = data.error !== null && data.error !== undefined && data.error !== '';
+                const cacheStale = data.cache_stale === true;
+                let feedStatus = 'OK';
+                if (cacheStale) {
+                    feedStatus = 'DEGRADED (CACHE)';
+                } else if (hasError || upstreamBad) {
+                    feedStatus = 'ERROR';
+                }
+                const warningMessage = feedStatus === 'OK'
+                    ? ''
+                    : (hasError ? data.error : (upstreamBad ? `Upstream HTTP ${data.upstream_http}` : 'Feed cache stale.'));
                 updateFeedStatus(feedStatus, warningMessage);
-                const seenHexes = new Set();
+                const seenIds = new Set();
                 const now = Date.now();
                 const missingGraceMs = Math.max(6000, (settings.poll_interval_ms || 1500) * 6);
                 (data.ac || []).forEach(ac => {
                     if (!ac || !isValidLat(ac.lat) || !isValidLon(ac.lon)) {
                         return;
                     }
-                    if (!ac.hex) {
+                    const flightId = buildAircraftId(ac);
+                    if (!flightId) {
                         return;
                     }
-                    seenHexes.add(ac.hex);
-                    const previous = flights[ac.hex] || {};
-                    const note = previous.note || noteStore[ac.hex] || stripNotes[ac.hex] || ac.note || '';
-                    flights[ac.hex] = { ...previous, ...ac, note, last_seen: now };
-                    renderFlight(flights[ac.hex]);
-                    stripDataCache[ac.hex] = flights[ac.hex];
+                    ac.hex = normalizeIdPart(ac.hex) || null;
+                    ac._id = flightId;
+                    seenIds.add(flightId);
+                    const previous = flights[flightId] || {};
+                    const note = previous.note || noteStore[flightId] || stripNotes[flightId] || ac.note || '';
+                    flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: now };
+                    renderFlight(flights[flightId]);
+                    stripDataCache[flightId] = flights[flightId];
                 });
-                Object.keys(flightMarkers).forEach(hex => {
-                    if (!seenHexes.has(hex)) {
-                        const lastSeen = flights[hex]?.last_seen || flightMarkers[hex]?.lastUpdate || 0;
+                Object.keys(flightMarkers).forEach(flightId => {
+                    if (!seenIds.has(flightId)) {
+                        const lastSeen = flights[flightId]?.last_seen || flightMarkers[flightId]?.lastUpdate || 0;
                         if (now - lastSeen > missingGraceMs) {
-                            removeFlight(hex);
+                            removeFlight(flightId);
                         }
                     }
                 });
@@ -2539,7 +2628,7 @@ if (is_dir($geojsonDir)) {
                     return;
                 }
                 console.error('Error fetching feed:', err);
-                updateFeedStatus('DEGRADED', 'Feed error – check diagnostics.');
+                updateFeedStatus('ERROR', 'Feed error – check diagnostics.');
                 pollBackoffIndex = Math.min(pollBackoffIndex + 1, pollBackoffSteps.length - 1);
             })
             .finally(() => {
@@ -2558,6 +2647,7 @@ if (is_dir($geojsonDir)) {
         }
         pollBackoffIndex = 0;
         pollFeed();
+        updateDebugInfo();
     }
 
     // Settings panel toggling
@@ -2597,8 +2687,8 @@ if (is_dir($geojsonDir)) {
         document.getElementById('airportInput').value = settings.airport.icao;
         document.getElementById('feedCenterLatInput').value = settings.feed_center.lat;
         document.getElementById('feedCenterLonInput').value = settings.feed_center.lon;
-        document.getElementById('displayCenterLatInput').value = settings.display_center.lat;
-        document.getElementById('displayCenterLonInput').value = settings.display_center.lon;
+        document.getElementById('displayCenterLatInput').value = settings.ui_center.lat;
+        document.getElementById('displayCenterLonInput').value = settings.ui_center.lon;
         document.getElementById('radiusInput').value = settings.radius_nm;
         document.getElementById('pollIntervalInput').value = settings.poll_interval_ms;
         document.getElementById('ringDistances').value = settings.rings.distances.join(',');
@@ -2626,8 +2716,8 @@ if (is_dir($geojsonDir)) {
         settings.airport.icao = document.getElementById('airportInput').value.trim().toUpperCase();
         settings.feed_center.lat = parseFloat(document.getElementById('feedCenterLatInput').value);
         settings.feed_center.lon = parseFloat(document.getElementById('feedCenterLonInput').value);
-        settings.display_center.lat = parseFloat(document.getElementById('displayCenterLatInput').value);
-        settings.display_center.lon = parseFloat(document.getElementById('displayCenterLonInput').value);
+        settings.ui_center.lat = parseFloat(document.getElementById('displayCenterLatInput').value);
+        settings.ui_center.lon = parseFloat(document.getElementById('displayCenterLonInput').value);
         const radiusVal = parseFloat(document.getElementById('radiusInput').value);
         settings.radius_nm = isNaN(radiusVal) ? settings.radius_nm : Math.min(250, Math.max(1, radiusVal));
         const pollVal = parseInt(document.getElementById('pollIntervalInput').value, 10);
