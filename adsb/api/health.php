@@ -1,5 +1,9 @@
 <?php
 
+$config = require __DIR__ . '/../config.php';
+require __DIR__ . '/../auth.php';
+requireAuth($config);
+
 $payload = [
     'base_path' => dirname($_SERVER['SCRIPT_NAME']),
     'php_version' => PHP_VERSION,

@@ -4,6 +4,8 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 $config = require __DIR__ . '/../config.php';
+require __DIR__ . '/../auth.php';
+requireAuth($config);
 
 $defaults = [
     'airport' => [
@@ -177,7 +179,7 @@ function normalizeSettings(array $input, array $defaults): array
             $settings['navpoints']['min_zoom'] = (int)$minZoom;
         }
         $zone = strtolower(trim((string)($input['navpoints']['zone'] ?? $settings['navpoints']['zone'])));
-        if (in_array($zone, ['all', 'nw', 'mmtj-120'], true)) {
+        if (in_array($zone, ['all', 'nw', 'ne', 'central', 'west', 'south', 'se', 'mmtj-120'], true)) {
             $settings['navpoints']['zone'] = $zone;
         }
         $maxPoints = filter_var($input['navpoints']['max_points'] ?? null, FILTER_VALIDATE_INT);

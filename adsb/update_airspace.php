@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * update_airspace.php
  *
@@ -17,15 +18,41 @@ ini_set('memory_limit', '512M');
 ini_set('max_execution_time', '600');
 
 $config = require __DIR__ . '/config.php';
+require __DIR__ . '/auth.php';
+requireAuth($config);
 
-if ($argc < 2) {
-    fwrite(STDERR, "Usage: php update_airspace.php <path-to-vatmex>\n");
-    exit(1);
+$isCli = PHP_SAPI === 'cli';
+$basePath = null;
+if ($isCli) {
+    if ($argc < 2) {
+        fwrite(STDERR, "Usage: php update_airspace.php <path-to-vatmex>\n");
+        exit(1);
+    }
+    $basePath = rtrim($argv[1], '/');
+} else {
+    header('Content-Type: application/json; charset=utf-8');
+    $basePath = isset($_GET['path']) ? trim((string)$_GET['path']) : null;
+    if (!$basePath) {
+        $payload = json_decode((string)file_get_contents('php://input'), true);
+        if (is_array($payload) && !empty($payload['path'])) {
+            $basePath = trim((string)$payload['path']);
+        }
+    }
 }
-$basePath = rtrim($argv[1], '/');
-if (!is_dir($basePath)) {
-    fwrite(STDERR, "Provided path does not exist: $basePath\n");
-    exit(1);
+
+function respond(array $payload, int $status = 200): void
+{
+    http_response_code($status);
+    echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if (!$basePath || !is_dir($basePath)) {
+    if ($isCli) {
+        fwrite(STDERR, "Provided path does not exist: {$basePath}\n");
+        exit(1);
+    }
+    respond(['error' => 'Provided path does not exist.', 'path' => $basePath], 400);
 }
 
 $outputDir = $config['geojson_dir'];
@@ -104,6 +131,23 @@ function parseCoordinatePair(string $pair): ?array
     $pair = trim($pair);
     if ($pair === '') {
         return null;
+    }
+
+    if (preg_match('/^[+-]\d+/', $pair) && preg_match('/[+-]\d+$/', $pair)) {
+        $secondSign = strpos($pair, '+', 1);
+        $minusPos = strpos($pair, '-', 1);
+        if ($secondSign === false || ($minusPos !== false && $minusPos < $secondSign)) {
+            $secondSign = $minusPos;
+        }
+        if ($secondSign !== false) {
+            $latToken = substr($pair, 0, $secondSign);
+            $lonToken = substr($pair, $secondSign);
+            $lat = parseCoordinate($latToken);
+            $lon = parseCoordinate($lonToken);
+            if ($lat !== null && $lon !== null) {
+                return [$lon, $lat];
+            }
+        }
     }
 
     if (preg_match('/^([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)$/', $pair, $m)) {
@@ -305,7 +349,47 @@ function parseNavData(string $navPath): array
             ];
         }
     }
-    // Additional parsing for fixes.yaml and navaids.yaml could be added here
+    $fixFile = $navPath . '/fixes.yaml';
+    if (file_exists($fixFile)) {
+        $fixes = yaml_parse_file($fixFile);
+        foreach ($fixes as $name => $data) {
+            if (!isset($data['lat'], $data['lon'])) {
+                continue;
+            }
+            $features[] = [
+                'type' => 'Feature',
+                'properties' => [
+                    'name' => (string)$name,
+                    'type' => 'fix',
+                ],
+                'geometry' => [
+                    'type' => 'Point',
+                    'coordinates' => [ (float)$data['lon'], (float)$data['lat'] ],
+                ],
+            ];
+        }
+    }
+    $navaidFile = $navPath . '/navaids.yaml';
+    if (file_exists($navaidFile)) {
+        $navaids = yaml_parse_file($navaidFile);
+        foreach ($navaids as $name => $data) {
+            if (!isset($data['lat'], $data['lon'])) {
+                continue;
+            }
+            $features[] = [
+                'type' => 'Feature',
+                'properties' => [
+                    'name' => (string)$name,
+                    'type' => 'navaid',
+                    'ident' => $data['ident'] ?? null,
+                ],
+                'geometry' => [
+                    'type' => 'Point',
+                    'coordinates' => [ (float)$data['lon'], (float)$data['lat'] ],
+                ],
+            ];
+        }
+    }
     return $features;
 }
 
@@ -413,7 +497,7 @@ function parseAllMaps(string $mapsDir, array $categoryMatchers): array
 /**
  * Build catalog metadata for generated GeoJSON layers.
  */
-function buildCatalog(string $outputDir, array $metadata = []): void
+function buildCatalog(string $outputDir, array $metadata = []): array
 {
     $files = glob($outputDir . '/*.geojson');
     $layers = [];
@@ -447,6 +531,45 @@ function buildCatalog(string $outputDir, array $metadata = []): void
     $path = $outputDir . '/catalog.json';
     file_put_contents($path, json_encode($catalog, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     echo "Written: $path\n";
+
+    return $catalog;
+}
+
+function ensureAirspaceDb(string $outputDir): ?PDO
+{
+    $dbPath = rtrim($outputDir, '/\\') . '/airspace.sqlite';
+    try {
+        $pdo = new PDO('sqlite:' . $dbPath);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('CREATE TABLE IF NOT EXISTS airspace_layers (
+            name TEXT PRIMARY KEY,
+            features INTEGER NOT NULL,
+            coords INTEGER NOT NULL,
+            bytes INTEGER NOT NULL,
+            bbox TEXT,
+            updated_at TEXT NOT NULL
+        )');
+        return $pdo;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function persistCatalogToDb(PDO $pdo, array $layers): void
+{
+    $stmt = $pdo->prepare('INSERT INTO airspace_layers (name, features, coords, bytes, bbox, updated_at)
+        VALUES (:name, :features, :coords, :bytes, :bbox, :updated_at)
+        ON CONFLICT(name) DO UPDATE SET features = excluded.features, coords = excluded.coords, bytes = excluded.bytes, bbox = excluded.bbox, updated_at = excluded.updated_at');
+    foreach ($layers as $layer) {
+        $stmt->execute([
+            ':name' => $layer['name'],
+            ':features' => (int)$layer['features'],
+            ':coords' => (int)$layer['coords'],
+            ':bytes' => (int)$layer['bytes'],
+            ':bbox' => $layer['bbox'] ? json_encode($layer['bbox'], JSON_UNESCAPED_SLASHES) : null,
+            ':updated_at' => gmdate('c'),
+        ]);
+    }
 }
 
 function geojsonStats(string $path): ?array
@@ -531,58 +654,78 @@ function detectVatmexCommit(string $basePath): ?string
     return $commit !== '' ? $commit : null;
 }
 
-// 1. Restricted areas
-$restricted = parseRestrictedAreas($basePath . '/RestrictedAreas.xml');
-if (!empty($restricted)) {
-    writeGeoJSON('restricted-areas', $restricted, $outputDir);
-}
-
-// 2. FIR limits
-$firFeatures = [];
-foreach (glob($basePath . '/Maps/*/FIR_LIMITS.xml') as $firFile) {
-    $firFeatures = array_merge($firFeatures, parseFirLimits($firFile));
-}
-if (!empty($firFeatures)) {
-    writeGeoJSON('fir-limits', $firFeatures, $outputDir);
-}
-
-// 3. Parse system maps for additional categories beyond the classic
-// TMA/CTR/ATZ/ACC/MVA/MRA suffixes.  We scan all map files and classify
-// them using regex patterns on the file name to expand coverage.
-$categoryMatchers = [
-    'tma' => ['/_TMA/i', '/\\bTMA\\b/i'],
-    'ctr' => ['/_CTR/i', '/\\bCTR\\b/i'],
-    'atz' => ['/_ATZ/i', '/\\bATZ\\b/i'],
-    'acc' => ['/_ACC/i', '/\\bACC\\b/i'],
-    'cta' => ['/_CTA/i', '/\\bCTA\\b/i'],
-    'fir' => ['/_FIR/i', '/\\bFIR\\b/i'],
-    'mva' => ['/_MVA/i', '/_MRA/i', '/\\bMVA\\b/i', '/\\bMRA\\b/i', '/MINIMAS/i', '/VECTOREO/i'],
-    'airways' => ['/_AWY/i', '/\\bAIRWAY\\b/i', '/_UTA/i', '/_LTA/i', '/_UIR/i'],
-    'procedures' => ['/_SID/i', '/_STAR/i', '/_APP/i', '/\\bSID\\b/i', '/\\bSTAR\\b/i', '/\\bAPP\\b/i'],
-    'vfr' => ['/_VFR/i', '/\\bVFR\\b/i', '/CORRIDOR/i'],
-    'sectors' => ['/_SECTOR/i', '/SECTOR/i'],
-];
-$mapLayers = parseAllMaps($basePath . '/Maps', $categoryMatchers);
-foreach ($mapLayers as $layerName => $features) {
-    if (!empty($features)) {
-        writeGeoJSON($layerName, $features, $outputDir);
+try {
+    // 1. Restricted areas
+    $restricted = parseRestrictedAreas($basePath . '/RestrictedAreas.xml');
+    if (!empty($restricted)) {
+        writeGeoJSON('restricted-areas', $restricted, $outputDir);
     }
-}
 
-// 4. Nav data (optional) – expects vatis-mmfr-navdata-main alongside the vatmex directory
-$navDataPath = dirname($basePath) . '/vatis-mmfr-navdata-main';
-if (is_dir($navDataPath)) {
-    $navFeatures = parseNavData($navDataPath);
-    if (!empty($navFeatures)) {
-        writeGeoJSON('nav-points', $navFeatures, $outputDir);
+    // 2. FIR limits
+    $firFeatures = [];
+    foreach (glob($basePath . '/Maps/*/FIR_LIMITS.xml') as $firFile) {
+        $firFeatures = array_merge($firFeatures, parseFirLimits($firFile));
     }
+    if (!empty($firFeatures)) {
+        writeGeoJSON('fir-limits', $firFeatures, $outputDir);
+    }
+
+    // 3. Parse system maps for additional categories beyond the classic
+    // TMA/CTR/ATZ/ACC/MVA/MRA suffixes.  We scan all map files and classify
+    // them using regex patterns on the file name to expand coverage.
+    $categoryMatchers = [
+        'tma' => ['/_TMA/i', '/\\bTMA\\b/i'],
+        'ctr' => ['/_CTR/i', '/\\bCTR\\b/i'],
+        'atz' => ['/_ATZ/i', '/\\bATZ\\b/i'],
+        'acc' => ['/_ACC/i', '/\\bACC\\b/i'],
+        'cta' => ['/_CTA/i', '/\\bCTA\\b/i'],
+        'fir' => ['/_FIR/i', '/\\bFIR\\b/i'],
+        'mva' => ['/_MVA/i', '/_MRA/i', '/\\bMVA\\b/i', '/\\bMRA\\b/i', '/MINIMAS/i', '/VECTOREO/i'],
+        'airways' => ['/_AWY/i', '/\\bAIRWAY\\b/i', '/_UTA/i', '/_LTA/i', '/_UIR/i'],
+        'procedures' => ['/_SID/i', '/_STAR/i', '/_APP/i', '/\\bSID\\b/i', '/\\bSTAR\\b/i', '/\\bAPP\\b/i'],
+        'vfr' => ['/_VFR/i', '/\\bVFR\\b/i', '/CORRIDOR/i'],
+        'sectors' => ['/_SECTOR/i', '/SECTOR/i'],
+    ];
+    $mapLayers = parseAllMaps($basePath . '/Maps', $categoryMatchers);
+    foreach ($mapLayers as $layerName => $features) {
+        if (!empty($features)) {
+            writeGeoJSON($layerName, $features, $outputDir);
+        }
+    }
+
+    // 4. Nav data (optional) – expects vatis-mmfr-navdata-main alongside the vatmex directory
+    $navDataPath = dirname($basePath) . '/vatis-mmfr-navdata-main';
+    if (is_dir($navDataPath)) {
+        $navFeatures = parseNavData($navDataPath);
+        if (!empty($navFeatures)) {
+            writeGeoJSON('nav-points', $navFeatures, $outputDir);
+        }
+    }
+
+    // 5. Catalog metadata
+    $metadata = [
+        'airac' => detectAirac($basePath),
+        'vatmex_commit' => detectVatmexCommit($basePath),
+    ];
+    $catalog = buildCatalog($outputDir, $metadata);
+    $pdo = ensureAirspaceDb($outputDir);
+    if ($pdo) {
+        persistCatalogToDb($pdo, array_values($catalog['layers'] ?? []));
+    }
+
+    if ($isCli) {
+        echo "Update complete.\n";
+    } else {
+        respond([
+            'ok' => true,
+            'catalog' => $catalog,
+            'output_dir' => $outputDir,
+        ]);
+    }
+} catch (Throwable $e) {
+    if ($isCli) {
+        fwrite(STDERR, "Error: {$e->getMessage()}\n");
+        exit(1);
+    }
+    respond(['ok' => false, 'error' => $e->getMessage()], 500);
 }
-
-// 5. Catalog metadata
-$metadata = [
-    'airac' => detectAirac($basePath),
-    'vatmex_commit' => detectVatmexCommit($basePath),
-];
-buildCatalog($outputDir, $metadata);
-
-echo "Update complete.\n";

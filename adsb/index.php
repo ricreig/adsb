@@ -10,6 +10,8 @@
 
 // Load configuration
 $config = require __DIR__ . '/config.php';
+require __DIR__ . '/auth.php';
+requireAuth($config);
 $base = '/' . trim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
 if ($base === '/') {
     $base = '/';
@@ -176,6 +178,29 @@ if (is_dir($geojsonDir)) {
         }
         #stripTray {
             margin-top: 10px;
+        }
+        #stripDetails {
+            margin-top: 8px;
+            padding: 6px;
+            border: 1px solid #3f5270;
+            background: #16263a;
+            font-size: 12px;
+            color: #cdd6f4;
+        }
+        #flightPlanPanel {
+            margin-top: 12px;
+            padding: 8px;
+            border: 1px solid #3f5270;
+            background: #1b2b42;
+            font-size: 12px;
+        }
+        #flightPlanPanel h3 {
+            margin: 0 0 6px 0;
+            font-size: 13px;
+        }
+        #flightPlanPanel button {
+            margin-top: 6px;
+            width: 100%;
         }
         .strip {
             background: #1d2d44;
@@ -387,8 +412,14 @@ if (is_dir($geojsonDir)) {
         </div>
         <h2>Flight Strips</h2>
         <div id="stripTray"></div>
+        <div id="stripDetails">Selecciona una tira para ver detalles.</div>
         <h2>Selected Flight</h2>
         <div id="flightInfo">Click a flight to see details.</div>
+        <div id="flightPlanPanel">
+            <h3>Flight Plan</h3>
+            <div id="flightPlanSummary">Selecciona un vuelo para ver el plan.</div>
+            <button id="routeToggleBtn" type="button" disabled>Route OFF</button>
+        </div>
 
         <h2>Settings</h2>
         <button id="settingsToggle" style="width:100%;margin-bottom:10px;">Open Settings</button>
@@ -769,15 +800,23 @@ if (is_dir($geojsonDir)) {
             primary,
             fallback,
             errors: 0,
+            fallbackActive: false,
         };
         primary.on('tileerror', () => {
             const state = basemapLayers[mode];
             state.errors += 1;
-            if (state.errors >= 5 && map.hasLayer(state.primary)) {
+            if (state.errors >= 5 && map.hasLayer(state.primary) && !state.fallbackActive) {
                 map.removeLayer(state.primary);
                 state.fallback.addTo(map);
+                state.fallbackActive = true;
                 tileStatus.style.display = 'block';
                 tileStatus.textContent = 'Basemap fallback activated.';
+            }
+        });
+        primary.on('tileload', () => {
+            const state = basemapLayers[mode];
+            if (!state.fallbackActive) {
+                state.errors = 0;
             }
         });
         return basemapLayers[mode];
@@ -795,6 +834,7 @@ if (is_dir($geojsonDir)) {
             map.removeLayer(activeBasemap.fallback);
         }
         next.errors = 0;
+        next.fallbackActive = false;
         next.primary.addTo(map);
         activeBasemap = next;
         tileStatus.style.display = 'none';
@@ -803,6 +843,18 @@ if (is_dir($geojsonDir)) {
 
     // Container for GeoJSON overlay layers
     const overlays = {};
+    const bboxLayers = new Set([
+        'airways',
+        'procedures',
+        'mva',
+        'vfr',
+        'sectors',
+        'restricted-areas',
+        'fir-limits',
+        'nav-points',
+        'navaids',
+        'fixes',
+    ]);
 
     // Colours per layer (defaults).  Operators can change via colour inputs.
     const layerColours = {};
@@ -857,12 +909,28 @@ if (is_dir($geojsonDir)) {
     });
 
     // Load a GeoJSON layer when checked
-    function loadLayer(id) {
-        if (overlays[id]) {
+    function buildLayerUrl(id) {
+        let url = buildUrl(geojsonLayers[id]);
+        if (bboxLayers.has(id)) {
+            const bounds = map.getBounds();
+            url += `&north=${encodeURIComponent(bounds.getNorth())}`;
+            url += `&south=${encodeURIComponent(bounds.getSouth())}`;
+            url += `&east=${encodeURIComponent(bounds.getEast())}`;
+            url += `&west=${encodeURIComponent(bounds.getWest())}`;
+        }
+        return url;
+    }
+
+    function loadLayer(id, forceReload = false) {
+        if (overlays[id] && !forceReload) {
             map.addLayer(overlays[id]);
             return;
         }
-        const url = buildUrl(geojsonLayers[id]);
+        if (overlays[id]) {
+            map.removeLayer(overlays[id]);
+            delete overlays[id];
+        }
+        const url = buildLayerUrl(id);
         fetchGeoJson(url, `GeoJSON layer ${id} (${url})`)
             .then(data => {
                 const normalized = normalizeGeojson(data, {
@@ -887,6 +955,20 @@ if (is_dir($geojsonDir)) {
                 layer.addTo(map);
             })
             .catch(err => console.error('Error loading layer ' + id, err));
+    }
+
+    let bboxReloadTimer = null;
+    function scheduleBboxLayerReload() {
+        if (bboxReloadTimer) {
+            clearTimeout(bboxReloadTimer);
+        }
+        bboxReloadTimer = setTimeout(() => {
+            Object.keys(overlays).forEach(id => {
+                if (bboxLayers.has(id) && map.hasLayer(overlays[id])) {
+                    loadLayer(id, true);
+                }
+            });
+        }, 600);
     }
 
     // Remove a GeoJSON layer when unchecked
@@ -1005,12 +1087,25 @@ if (is_dir($geojsonDir)) {
     let selectedFlight = null;
     const noteStore = loadNoteStore();
     const stripTray = document.getElementById('stripTray');
+    const stripDetails = document.getElementById('stripDetails');
     const flightInfoDiv = document.getElementById('flightInfo');
+    const flightPlanSummary = document.getElementById('flightPlanSummary');
+    const routeToggleBtn = document.getElementById('routeToggleBtn');
     const notif = document.getElementById('notif');
     const feedError = document.getElementById('feedError');
     const feedErrorText = document.getElementById('feedErrorText');
     const feedErrorDetails = document.getElementById('feedErrorDetails');
     const feedStatusEl = document.getElementById('feedStatus');
+
+    let stripOrder = [];
+    let stripNotes = {};
+    let stripStatuses = {};
+    let stripDataCache = {};
+    let selectedStrip = null;
+    let routeLayer = null;
+    let routeActive = false;
+    let routePlan = null;
+    let lastStateSync = 0;
 
     const defaultSettings = {
         airport: {
@@ -1059,6 +1154,7 @@ if (is_dir($geojsonDir)) {
 
     let settings = JSON.parse(JSON.stringify(defaultSettings));
     let airacUpdateEnabled = false;
+    let vatmexDirConfigured = false;
 
     // Range ring overlay container
     let rangeRings = [];
@@ -1099,6 +1195,7 @@ if (is_dir($geojsonDir)) {
     });
     map.on('moveend', () => {
         scheduleNavpointsUpdate();
+        scheduleBboxLayerReload();
     });
 
     // Utility: compute destination point given distance (NM) and bearing from start
@@ -1285,10 +1382,154 @@ if (is_dir($geojsonDir)) {
         }
         if (note) {
             noteStore[hex] = note;
+            stripNotes[hex] = note;
         } else {
             delete noteStore[hex];
+            delete stripNotes[hex];
         }
         persistNoteStore(noteStore);
+        persistStrip({ hex, note });
+    }
+
+    function loadStrips() {
+        fetchJson(apiUrl('strips.php'), {}, 'Load strips')
+            .then(data => {
+                const strips = Array.isArray(data.strips) ? data.strips : [];
+                stripOrder = strips
+                    .filter(strip => strip && strip.hex)
+                    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+                    .map(strip => strip.hex);
+                stripNotes = {};
+                stripStatuses = {};
+                stripDataCache = {};
+                strips.forEach(strip => {
+                    stripNotes[strip.hex] = strip.note || '';
+                    stripStatuses[strip.hex] = strip.status || 'normal';
+                    flightStates[strip.hex] = strip.status || flightStates[strip.hex] || 'normal';
+                    stripDataCache[strip.hex] = strip;
+                });
+                updateStrips();
+            })
+            .catch(() => {});
+    }
+
+    function persistStrip(strip) {
+        if (!strip || !strip.hex) {
+            return;
+        }
+        return fetchJson(apiUrl('strips.php'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ strip }),
+        }, 'Save strip')
+            .then(data => {
+                if (data && Array.isArray(data.strips)) {
+                    stripOrder = data.strips
+                        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+                        .map(entry => entry.hex);
+                    data.strips.forEach(entry => {
+                        stripNotes[entry.hex] = entry.note || '';
+                        stripStatuses[entry.hex] = entry.status || 'normal';
+                        flightStates[entry.hex] = entry.status || flightStates[entry.hex] || 'normal';
+                        stripDataCache[entry.hex] = entry;
+                    });
+                }
+            })
+            .catch(() => {});
+    }
+
+    function persistStripOrder(order) {
+        return fetchJson(apiUrl('strips.php'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order }),
+        }, 'Save strip order')
+            .then(data => {
+                if (data && Array.isArray(data.strips)) {
+                    stripOrder = data.strips
+                        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+                        .map(entry => entry.hex);
+                    updateStrips();
+                }
+            })
+            .catch(() => {});
+    }
+
+    function ensureStripForFlight(hex) {
+        if (!hex) {
+            return;
+        }
+        if (!stripOrder.includes(hex)) {
+            stripOrder.push(hex);
+        }
+        const status = flightStates[hex] || stripStatuses[hex] || 'normal';
+        const note = flights[hex]?.note || stripNotes[hex] || '';
+        persistStrip({
+            hex,
+            status,
+            note,
+        });
+    }
+
+    function updateStripDetails(hex) {
+        if (!hex) {
+            stripDetails.textContent = 'Selecciona una tira para ver detalles.';
+            return;
+        }
+        const ac = flights[hex] || {};
+        const status = getFlightStatus(hex);
+        const note = ac.note || stripNotes[hex] || '';
+        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : hex;
+        const alt = ac.alt ? `${ac.alt}FT` : '---';
+        const gs = ac.gs ? `${ac.gs}KT` : '---';
+        const trk = ac.track ? `${ac.track}°` : '---';
+        stripDetails.innerHTML = `
+            <strong>${escapeHtml(callsign)}</strong><br>
+            Estado: ${escapeHtml(status.toUpperCase())}<br>
+            ALT ${escapeHtml(alt)} · GS ${escapeHtml(gs)} · TRK ${escapeHtml(trk)}<br>
+            Nota: ${escapeHtml(note || '---')}
+        `;
+    }
+
+    function loadStates() {
+        fetchJson(apiUrl('state.php'), {}, 'Load states')
+            .then(data => {
+                const states = Array.isArray(data.states) ? data.states : [];
+                states.forEach(state => {
+                    if (!state || !state.hex) {
+                        return;
+                    }
+                    flightStates[state.hex] = state.status || flightStates[state.hex] || 'normal';
+                });
+                updateStrips();
+            })
+            .catch(() => {});
+    }
+
+    function syncFlightStates(force = false) {
+        const now = Date.now();
+        if (!force && now - lastStateSync < 5000) {
+            return;
+        }
+        lastStateSync = now;
+        const states = Object.values(flights).map(ac => ({
+            hex: ac.hex,
+            lat: ac.lat,
+            lon: ac.lon,
+            alt: ac.alt,
+            track: ac.track,
+            gs: ac.gs,
+            status: getFlightStatus(ac.hex),
+        }));
+        if (!states.length) {
+            return;
+        }
+        fetchJson(apiUrl('state.php'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ states }),
+        }, 'Save states')
+            .catch(() => {});
     }
 
     function formatUpdateTime(ts) {
@@ -1301,7 +1542,7 @@ if (is_dir($geojsonDir)) {
 
     // Add or update a flight marker on the map
     function getFlightStatus(hex) {
-        return flightStates[hex] || 'normal';
+        return flightStates[hex] || stripStatuses[hex] || 'normal';
     }
 
     function flightColor(status) {
@@ -1514,7 +1755,10 @@ if (is_dir($geojsonDir)) {
                 pane: 'labels',
             });
             marker.setTooltipOpacity(shouldShowLabel(ac) ? 1 : 0);
-            marker.on('click', () => selectFlight(id));
+            marker.on('click', () => {
+                handleBrlSelection(flights[id]);
+                selectFlight(id);
+            });
             marker.on('tooltipopen', () => {
                 bindLabelNoteEditor(marker, id);
                 updateTooltipClass(marker, ac);
@@ -1586,7 +1830,7 @@ if (is_dir($geojsonDir)) {
             }
             // Remove from strip tray if not assumed
             const stripEl = document.querySelector('.strip[data-hex="' + id + '"]');
-            if (stripEl && !stripEl.classList.contains('assumed')) {
+            if (stripEl && !stripOrder.includes(id)) {
                 stripEl.remove();
             }
         });
@@ -1605,7 +1849,7 @@ if (is_dir($geojsonDir)) {
         const origin = ac.origin || ac.orig || '';
         const dest = ac.destination || ac.dest || '';
         const eta = ac.eta || '';
-        const note = ac.note || '';
+        const note = ac.note || stripNotes[ac.hex] || '';
         const statusLabel = status === 'assumed' ? 'ASUMIDA' : status === 'released' ? 'LIBERADA' : 'PENDIENTE';
         const routeSummary = ac.routeSummary || (origin || dest ? `${origin || '---'} → ${dest || '---'}` : 'Sin ruta disponible');
         const detailsPrimary = `
@@ -1632,38 +1876,73 @@ if (is_dir($geojsonDir)) {
     }
 
     function updateStrips() {
-        // Remove strips that no longer exist (non‑assumed)
-        document.querySelectorAll('#stripTray .strip').forEach(strip => {
-            const id = strip.dataset.hex;
-            const status = getFlightStatus(id);
-            if (!flights[id] && status !== 'assumed') {
+        const activeHexes = new Set(Object.keys(flights));
+        const ordered = stripOrder.filter(hex => activeHexes.has(hex));
+        Object.keys(flights).forEach(hex => {
+            if (!ordered.includes(hex)) {
+                ordered.push(hex);
+            }
+        });
+        stripOrder = ordered;
+
+        stripTray.querySelectorAll('.strip').forEach(strip => {
+            if (!stripOrder.includes(strip.dataset.hex)) {
                 strip.remove();
             }
         });
-        // Add or update strips
-        Object.values(flights).forEach(ac => {
-            let strip = document.querySelector('.strip[data-hex="' + ac.hex + '"]');
+
+        stripOrder.forEach((hex, index) => {
+            const ac = flights[hex] || stripDataCache[hex] || { hex };
+            let strip = document.querySelector('.strip[data-hex="' + hex + '"]');
             if (!strip) {
                 strip = document.createElement('div');
                 strip.className = 'strip';
-                strip.dataset.hex = ac.hex;
+                strip.dataset.hex = hex;
+                strip.draggable = true;
                 strip.addEventListener('click', () => {
-                    selectFlight(ac.hex);
+                    selectedStrip = hex;
+                    updateStripDetails(hex);
+                    selectFlight(hex);
+                });
+                strip.addEventListener('dragstart', event => {
+                    event.dataTransfer.setData('text/plain', hex);
+                    event.dataTransfer.effectAllowed = 'move';
+                });
+                strip.addEventListener('dragover', event => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                });
+                strip.addEventListener('drop', event => {
+                    event.preventDefault();
+                    const draggedHex = event.dataTransfer.getData('text/plain');
+                    if (!draggedHex || draggedHex === hex) {
+                        return;
+                    }
+                    const newOrder = stripOrder.filter(item => item !== draggedHex);
+                    const insertIndex = newOrder.indexOf(hex);
+                    newOrder.splice(insertIndex, 0, draggedHex);
+                    stripOrder = newOrder;
+                    updateStrips();
+                    persistStripOrder(stripOrder);
                 });
                 stripTray.appendChild(strip);
             }
-            const status = getFlightStatus(ac.hex);
+            const status = getFlightStatus(hex);
             strip.classList.toggle('assumed', status === 'assumed');
             strip.classList.toggle('released', status === 'released');
             strip.classList.toggle('pending', status === 'normal');
-            strip.classList.toggle('selected', selectedFlight === ac.hex);
+            strip.classList.toggle('selected', selectedFlight === hex || selectedStrip === hex);
             strip.innerHTML = buildStripHtml(ac, status);
             if (['7500','7600','7700'].includes(ac.squawk)) {
                 strip.style.background = '#8a0e0e';
             } else {
                 strip.style.background = '';
             }
+            stripTray.appendChild(strip);
         });
+        if (selectedStrip) {
+            updateStripDetails(selectedStrip);
+        }
     }
 
     // Select a flight for detailed view and route display
@@ -1671,6 +1950,11 @@ if (is_dir($geojsonDir)) {
         const ac = flights[hex];
         if (!ac) return;
         selectedFlight = hex;
+        selectedStrip = hex;
+        ensureStripForFlight(hex);
+        updateStripDetails(hex);
+        routePlan = null;
+        clearRoute();
         // Highlight marker
         Object.keys(flightMarkers).forEach(id => {
             const m = flightMarkers[id].marker;
@@ -1706,7 +1990,6 @@ if (is_dir($geojsonDir)) {
         html += '<label>Note / OPMET:<br><textarea id="noteField" rows="2" style="width:95%;">' + (ac.note || '') + '</textarea></label><br>';
         html += '<button id="assumeBtn">Assume</button> ' +
                 '<button id="releaseBtn">Release</button> ' +
-                '<button id="routeBtn">Route</button> ' +
                 '<button id="saveNoteBtn">Save Note</button>';
         flightInfoDiv.innerHTML = html;
         // Bind buttons
@@ -1715,9 +1998,6 @@ if (is_dir($geojsonDir)) {
         });
         document.getElementById('releaseBtn').addEventListener('click', () => {
             releaseFlight(hex);
-        });
-        document.getElementById('routeBtn').addEventListener('click', () => {
-            drawRoute(hex);
         });
         document.getElementById('saveNoteBtn').addEventListener('click', () => {
             const text = document.getElementById('noteField').value.trim();
@@ -1732,11 +2012,13 @@ if (is_dir($geojsonDir)) {
             updateStrips();
         });
         updateLabelVisibility();
+        updateFlightPlanPanel(hex);
     }
 
     // Assume a flight (mark as assumed)
     function assumeFlight(hex) {
         flightStates[hex] = 'assumed';
+        stripStatuses[hex] = 'assumed';
         const markerData = flightMarkers[hex];
         if (markerData) {
             const color = flightColor('assumed');
@@ -1756,11 +2038,13 @@ if (is_dir($geojsonDir)) {
         if (selectedFlight === hex) {
             selectFlight(hex);
         }
+        persistStrip({ hex, status: 'assumed', note: flights[hex]?.note || stripNotes[hex] || '' });
     }
 
     // Release a flight (mark as released)
     function releaseFlight(hex) {
         flightStates[hex] = 'released';
+        stripStatuses[hex] = 'released';
         const markerData = flightMarkers[hex];
         if (markerData) {
             const color = flightColor('released');
@@ -1780,65 +2064,87 @@ if (is_dir($geojsonDir)) {
         if (selectedFlight === hex) {
             selectFlight(hex);
         }
+        persistStrip({ hex, status: 'released', note: flights[hex]?.note || stripNotes[hex] || '' });
     }
 
-    // Placeholder for route drawing.  In a production system this would
-    // query a flight plan API to retrieve the route (fixes and navaids)
-    // associated with the aircraft.  This function draws a simple path
-    // between the selected track and the destination of its flight plan if
-    // available.  It uses a GeoJSON line stored on the server as a
-    // placeholder.
-    let routeLayer = null;
-    function drawRoute(hex) {
-        // Remove previous route
+    function clearRoute() {
         if (routeLayer) {
             map.removeLayer(routeLayer);
             routeLayer = null;
         }
+        routeActive = false;
+        routeToggleBtn.textContent = 'Route OFF';
+    }
+
+    function applyRouteToMap(route) {
+        clearRoute();
+        if (!route) {
+            return;
+        }
+        const normalized = normalizeGeojson(route);
+        routeLayer = L.geoJSON(normalized, {
+            style: { color: '#d946ef', weight: 2.2 }
+        }).addTo(map);
+        if (routeLayer.getBounds().isValid()) {
+            map.fitBounds(routeLayer.getBounds(), { maxZoom: 8 });
+        }
+        routeActive = true;
+        routeToggleBtn.textContent = 'Route ON';
+    }
+
+    function loadFlightPlan(hex) {
         const ac = flights[hex];
-        if (!ac) return;
+        if (!ac) {
+            return Promise.resolve(null);
+        }
         const callsign = ac.flight ? ac.flight.trim().toUpperCase() : '';
         if (!callsign) {
             ac.routeSummary = 'Sin ruta disponible';
             showNotification('Sin ruta disponible: falta callsign.');
             updateStrips();
-            return;
+            return Promise.resolve(null);
         }
         const url = apiUrl('route.php') + `?callsign=${encodeURIComponent(callsign)}`;
-        fetchJson(url, {}, `Route (${callsign})`)
+        return fetchJson(url, {}, `Route (${callsign})`)
             .then(data => {
                 if (!data.ok || !data.route) {
                     ac.routeSummary = 'Sin ruta disponible';
-                    showNotification('Sin ruta disponible para ' + callsign);
                     updateStrips();
-                    return;
+                    showNotification(data.error || 'Sin ruta disponible para ' + callsign);
+                    return null;
                 }
-                const normalized = normalizeGeojson(data.route);
-                routeLayer = L.geoJSON(normalized, {
-                    style: { color: '#ffd166', weight: 2.0 }
-                }).addTo(map);
-                if (routeLayer.getBounds().isValid()) {
-                    map.fitBounds(routeLayer.getBounds(), { maxZoom: 8 });
-                }
-                if (data.summary) {
-                    const fixCount = data.summary.fix_count || 0;
-                    const origin = data.summary.origin || ac.origin || ac.orig || '';
-                    const dest = data.summary.destination || ac.destination || ac.dest || '';
-                    const fixInfo = fixCount ? `Fixes: ${fixCount}` : 'Fixes: 0';
-                    ac.routeSummary = origin || dest ? `${origin || '---'} → ${dest || '---'} (${fixInfo})` : fixInfo;
-                } else {
-                    ac.routeSummary = 'Ruta cargada';
-                }
-                if (selectedFlight === hex) {
-                    selectFlight(hex);
-                }
+                routePlan = { ...data, callsign };
+                const summary = data.summary || {};
+                const fixCount = summary.fix_count || 0;
+                const origin = summary.origin || ac.origin || ac.orig || '';
+                const dest = summary.destination || ac.destination || ac.dest || '';
+                const fixInfo = fixCount ? `Fixes: ${fixCount}` : 'Fixes: 0';
+                ac.routeSummary = origin || dest ? `${origin || '---'} → ${dest || '---'} (${fixInfo})` : fixInfo;
                 updateStrips();
+                updateFlightPlanPanel(hex);
+                return data;
             })
             .catch(() => {
                 ac.routeSummary = 'Sin ruta disponible';
                 updateStrips();
                 showNotification('Sin ruta disponible para ' + callsign);
+                return null;
             });
+    }
+
+    function updateFlightPlanPanel(hex) {
+        const ac = flights[hex];
+        if (!ac) {
+            flightPlanSummary.textContent = 'Selecciona un vuelo para ver el plan.';
+            routeToggleBtn.disabled = true;
+            clearRoute();
+            return;
+        }
+        const callsign = ac.flight ? ac.flight.trim().toUpperCase() : '';
+        const summary = ac.routeSummary || 'Ruta no cargada.';
+        flightPlanSummary.textContent = callsign ? summary : 'Ruta no disponible: falta callsign.';
+        routeToggleBtn.disabled = !callsign;
+        routeToggleBtn.textContent = routeActive ? 'Route ON' : 'Route OFF';
     }
 
     // Show a transient notification
@@ -1861,6 +2167,7 @@ if (is_dir($geojsonDir)) {
 
     let brlMode = null;
     let brlOrigin = null;
+    let brlOriginSpeed = null;
     let brlLine = null;
     let brlLabel = null;
     let brlTracking = false;
@@ -1885,6 +2192,22 @@ if (is_dir($geojsonDir)) {
         return { bearing, distanceNm };
     }
 
+    function formatEta(distanceNm, speedKt) {
+        if (!speedKt || speedKt <= 0) {
+            return null;
+        }
+        const totalMinutes = Math.round((distanceNm / speedKt) * 60);
+        if (!isFinite(totalMinutes)) {
+            return null;
+        }
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        }
+        return `${minutes}m`;
+    }
+
     function updateBrlLine(endLatLng) {
         if (!brlOrigin || !endLatLng) {
             return;
@@ -1893,9 +2216,8 @@ if (is_dir($geojsonDir)) {
         const lineLatLngs = [originLatLng, endLatLng];
         if (!brlLine) {
             brlLine = L.polyline(lineLatLngs, {
-                color: '#ff6b6b',
+                color: '#facc15',
                 weight: 2,
-                dashArray: '4 4',
             }).addTo(map);
         } else {
             brlLine.setLatLngs(lineLatLngs);
@@ -1905,19 +2227,22 @@ if (is_dir($geojsonDir)) {
             (originLatLng.lng + endLatLng.lng) / 2
         );
         const { bearing, distanceNm } = computeBearingRange(originLatLng.lat, originLatLng.lng, endLatLng.lat, endLatLng.lng);
-        const labelText = `BRG ${bearing.toFixed(0)}°  RNG ${distanceNm.toFixed(1)} NM`;
+        const etaText = formatEta(distanceNm, brlOriginSpeed);
+        const labelText = etaText
+            ? `BRG ${bearing.toFixed(0)}°  RNG ${distanceNm.toFixed(1)} NM  ETA ${etaText}`
+            : `BRG ${bearing.toFixed(0)}°  RNG ${distanceNm.toFixed(1)} NM`;
         if (!brlLabel) {
             brlLabel = L.marker(mid, {
                 icon: L.divIcon({
                     className: 'brl-label',
-                    html: `<div style="background:#0e1520;color:#ff6b6b;padding:2px 6px;border:1px solid #ff6b6b;border-radius:4px;font-size:11px;">${labelText}</div>`
+                    html: `<div style="background:#0e1520;color:#facc15;padding:2px 6px;border:1px solid #facc15;border-radius:4px;font-size:11px;">${labelText}</div>`
                 }),
             }).addTo(map);
         } else {
             brlLabel.setLatLng(mid);
             brlLabel.setIcon(L.divIcon({
                 className: 'brl-label',
-                html: `<div style="background:#0e1520;color:#ff6b6b;padding:2px 6px;border:1px solid #ff6b6b;border-radius:4px;font-size:11px;">${labelText}</div>`
+                html: `<div style="background:#0e1520;color:#facc15;padding:2px 6px;border:1px solid #facc15;border-radius:4px;font-size:11px;">${labelText}</div>`
             }));
         }
     }
@@ -1932,26 +2257,51 @@ if (is_dir($geojsonDir)) {
             brlLabel = null;
         }
         brlOrigin = null;
+        brlOriginSpeed = null;
     }
 
     function setBrlMode(mode) {
         brlMode = mode;
         brlOrigin = null;
         brlTracking = false;
+        brlOriginSpeed = null;
         clearBrl();
-        brlToggle.style.background = brlMode === 'manual' ? '#ff6b6b' : '';
+        brlToggle.style.background = brlMode === 'manual' ? '#facc15' : '';
         brlToggle.style.color = brlMode === 'manual' ? '#0b0f18' : '';
-        brlAirport.style.background = brlMode === 'airport' ? '#ffd166' : '';
+        brlAirport.style.background = brlMode === 'airport' ? '#facc15' : '';
         brlAirport.style.color = brlMode === 'airport' ? '#0b0f18' : '';
         if (brlMode === 'manual') {
             showNotification('BRL activo: primer clic define origen, segundo clic destino.');
+            if (selectedFlight) {
+                ensureStripForFlight(selectedFlight);
+            }
         } else if (brlMode === 'airport') {
             brlOrigin = [settings.airport.lat, settings.airport.lon];
             brlTracking = true;
             showNotification('AP BRL activo: clic para destino (origen aeropuerto).');
+            if (selectedFlight) {
+                ensureStripForFlight(selectedFlight);
+            }
         } else {
             showNotification('BRL desactivado');
         }
+    }
+
+    function handleBrlSelection(ac) {
+        if (!brlMode || !ac || !isFinite(ac.lat) || !isFinite(ac.lon)) {
+            return false;
+        }
+        if (!brlOrigin) {
+            brlOrigin = [ac.lat, ac.lon];
+            brlOriginSpeed = ac.gs || null;
+            brlTracking = true;
+            showNotification('BRL: origen definido.');
+            return true;
+        }
+        brlTracking = false;
+        updateBrlLine(L.latLng(ac.lat, ac.lon));
+        showNotification('BRL: destino definido.');
+        return true;
     }
 
     brlToggle.addEventListener('click', () => {
@@ -1974,6 +2324,7 @@ if (is_dir($geojsonDir)) {
         if (brlMode === 'manual') {
             if (!brlOrigin) {
                 brlOrigin = [event.latlng.lat, event.latlng.lng];
+                brlOriginSpeed = null;
                 brlTracking = true;
                 showNotification('BRL: origen definido. Clic para destino.');
                 return;
@@ -2047,18 +2398,24 @@ if (is_dir($geojsonDir)) {
                 }
                 lastFeedUpdate = Date.now();
                 pollBackoffIndex = 0;
-                const feedStatus = data.cache_stale ? 'OK (CACHE)' : 'OK';
-                const warningMessage = data.cache_stale ? (data.error || '') : '';
+                const upstreamBad = data.upstream_http && Number(data.upstream_http) !== 200;
+                const degraded = Boolean(data.error) || Boolean(data.cache_stale) || upstreamBad;
+                const feedStatus = degraded
+                    ? (data.cache_stale ? 'DEGRADED (CACHE)' : 'DEGRADED')
+                    : 'OK';
+                const warningMessage = data.error || (upstreamBad ? `Upstream HTTP ${data.upstream_http}` : '');
                 updateFeedStatus(feedStatus, warningMessage);
                 (data.ac || []).forEach(ac => {
                     const previous = flights[ac.hex] || {};
-                    const note = previous.note || noteStore[ac.hex] || ac.note || '';
+                    const note = previous.note || noteStore[ac.hex] || stripNotes[ac.hex] || ac.note || '';
                     flights[ac.hex] = { ...previous, ...ac, note };
                     renderFlight(flights[ac.hex]);
+                    stripDataCache[ac.hex] = flights[ac.hex];
                 });
                 pruneFlights();
                 updateStrips();
                 updateLabelVisibility();
+                syncFlightStates();
             })
             .catch(err => {
                 if (err && err.name === 'AbortError') {
@@ -2143,7 +2500,7 @@ if (is_dir($geojsonDir)) {
         document.getElementById('navpointsMinZoom').value = settings.navpoints.min_zoom;
         document.getElementById('navpointsZone').value = settings.navpoints.zone;
         document.getElementById('navpointsMax').value = settings.navpoints.max_points;
-        airacUpdateBtn.style.display = airacUpdateEnabled ? 'inline-block' : 'none';
+        airacUpdateBtn.style.display = (airacUpdateEnabled && vatmexDirConfigured) ? 'inline-block' : 'none';
     });
     // Apply settings on button click
     document.getElementById('applySettings').addEventListener('click', () => {
@@ -2188,6 +2545,7 @@ if (is_dir($geojsonDir)) {
                 if (data.settings) {
                     settings = data.settings;
                     airacUpdateEnabled = !!data.airac_update_enabled;
+                    vatmexDirConfigured = !!data.vatmex_dir_configured;
                     applySettings();
                     startPolling();
                     settingsPanel.style.display = 'none';
@@ -2207,17 +2565,23 @@ if (is_dir($geojsonDir)) {
                     settings = data.settings;
                 }
                 airacUpdateEnabled = !!data.airac_update_enabled;
+                vatmexDirConfigured = !!data.vatmex_dir_configured;
                 applySettings();
+                loadStates();
+                loadStrips();
                 startPolling();
             })
             .catch(() => {
                 applySettings();
+                vatmexDirConfigured = false;
+                loadStates();
+                loadStrips();
                 startPolling();
             });
     }
 
     airacUpdateBtn.addEventListener('click', () => {
-        if (!airacUpdateEnabled) {
+        if (!airacUpdateEnabled || !vatmexDirConfigured) {
             return;
         }
         airacSpinner.style.display = 'inline-block';
@@ -2245,6 +2609,26 @@ if (is_dir($geojsonDir)) {
             .finally(() => {
                 airacSpinner.style.display = 'none';
             });
+    });
+
+    routeToggleBtn.addEventListener('click', () => {
+        if (!selectedFlight) {
+            return;
+        }
+        if (routeActive) {
+            clearRoute();
+            return;
+        }
+        const callsign = flights[selectedFlight]?.flight ? flights[selectedFlight].flight.trim().toUpperCase() : null;
+        if (routePlan && callsign && routePlan.callsign === callsign && routePlan.route) {
+            applyRouteToMap(routePlan.route);
+            return;
+        }
+        loadFlightPlan(selectedFlight).then(data => {
+            if (data && data.route) {
+                applyRouteToMap(data.route);
+            }
+        });
     });
 
     loadSettings();

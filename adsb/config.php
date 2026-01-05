@@ -4,24 +4,24 @@
 // referenced here are relative to the root of the project directory.
 
 return [
-    // Geographic coordinates for the reference point of MMTJ (Tijuana).
+    // Geographic coordinates for the reference point of the MMZT ACC core.
     // These are used as the default centre for the display and feed queries.
     'airport' => [
-        'icao' => 'MMTJ',
-        // Latitude and longitude of the airport reference point (ARP) in decimal degrees.
-        'lat' => 32.54100,
-        'lon' => -116.97000,
+        'icao' => 'MMZT',
+        // Latitude and longitude of the reference point (decimal degrees).
+        'lat' => 29.8839810,
+        'lon' => -114.0747826,
     ],
 
     // Base map tile URLs (no-labels). The primary is preferred; the fallback
     // is used automatically if the primary provider fails.
     // Dark map is the default for radar-style contrast.
-    'basemap' => 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    'basemap' => 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
     'basemap_fallback' => 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
     'basemap_attribution' => '&copy; OpenStreetMap contributors, &copy; CARTO',
     'basemap_fallback_attribution' => '&copy; OpenStreetMap contributors, &copy; CARTO',
     // Optional explicit light/dark providers for UI switching (fallback to basemap if omitted).
-    'basemap_dark' => 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    'basemap_dark' => 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
     'basemap_dark_fallback' => 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
     'basemap_dark_attribution' => '&copy; OpenStreetMap contributors, &copy; CARTO',
     'basemap_light' => 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
@@ -77,4 +77,17 @@ return [
     // Optional API key for flight plan lookups.  Some services require a
     // token – configure it here and implement the lookup in get_flight_plan().
     'flight_plan_api_key' => null,
+    // Optional flight plan API base URL (expects ?callsign= in the query).
+    'flight_plan_api_url' => null,
+    // Flight plan cache TTL (seconds).
+    'flight_plan_cache_ttl' => 900,
+
+    // Optional authentication for the UI and APIs.
+    'auth' => [
+        'enabled' => false,
+        'type' => 'basic', // basic or token
+        'user' => 'atc',
+        'pass' => 'change-me',
+        'token' => null,
+    ],
 ];

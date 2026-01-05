@@ -4,6 +4,8 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 $config = require __DIR__ . '/config.php';
+require __DIR__ . '/auth.php';
+requireAuth($config);
 
 $base = '/' . trim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
 if ($base === '/') {
@@ -30,6 +32,44 @@ if (is_file($dbPath)) {
 
 $status = ($sqliteAvailable && $dataDirWritable && $cacheDirWritable && $sqliteWritable) ? 'ok' : 'degraded';
 
+$upstreamStatusPath = $cacheDir . '/upstream.status.json';
+$upstreamStatus = null;
+if (is_file($upstreamStatusPath)) {
+    $contents = file_get_contents($upstreamStatusPath);
+    $decoded = $contents ? json_decode($contents, true) : null;
+    if (is_array($decoded)) {
+        $upstreamStatus = $decoded;
+    }
+}
+
+$cacheFiles = glob($cacheDir . '/adsb_feed_*.json') ?: [];
+$latestCacheAge = null;
+if ($cacheFiles) {
+    $latestMtime = 0;
+    foreach ($cacheFiles as $file) {
+        $mtime = filemtime($file);
+        if ($mtime && $mtime > $latestMtime) {
+            $latestMtime = $mtime;
+        }
+    }
+    if ($latestMtime > 0) {
+        $latestCacheAge = time() - $latestMtime;
+    }
+}
+
+$airacLogPath = $dataDir . '/airac_update.log';
+$airacStatus = null;
+if (is_file($airacLogPath)) {
+    $lines = file($airacLogPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines) {
+        $lastLine = $lines[count($lines) - 1];
+        $decoded = json_decode($lastLine, true);
+        if (is_array($decoded)) {
+            $airacStatus = $decoded;
+        }
+    }
+}
+
 echo json_encode([
     'status' => $status,
     'app_base' => $base,
@@ -40,6 +80,15 @@ echo json_encode([
         'data_dir' => $dataDirWritable,
         'cache_dir' => $cacheDirWritable,
         'sqlite_file' => $sqliteWritable,
+    ],
+    'feed' => [
+        'upstream' => $upstreamStatus,
+        'latest_cache_age_s' => $latestCacheAge,
+        'cache_dir' => $cacheDir,
+    ],
+    'airac' => [
+        'last_update' => $airacStatus,
+        'log_path' => is_file($airacLogPath) ? $airacLogPath : null,
     ],
     'now' => date('c'),
 ], JSON_UNESCAPED_SLASHES);
