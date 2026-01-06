@@ -20,6 +20,8 @@ if (!is_dir($cacheDir)) {
     mkdir($cacheDir, 0775, true);
 }
 
+const FEED_SCHEMA_VERSION = 2;
+
 function loadStoredSettings(array $config): array
 {
     $settings = [
@@ -85,16 +87,21 @@ function enforceFixedFeedCenter(array $settings, array $config): array
     return $settings;
 }
 
-function respond(array $payload, int $status = 200): void
-{
-    http_response_code($status);
-    echo json_encode($payload, JSON_UNESCAPED_SLASHES);
-    exit;
-}
-
 function nowMs(): int
 {
     return (int)round(microtime(true) * 1000);
+}
+
+function respond(array $payload, int $status = 200): void
+{
+    $payload += [
+        'schema_version' => FEED_SCHEMA_VERSION,
+        'generated_at' => date('c'),
+        'generated_at_ms' => nowMs(),
+    ];
+    http_response_code($status);
+    echo json_encode($payload, JSON_UNESCAPED_SLASHES);
+    exit;
 }
 
 function apcuAvailable(): bool
@@ -406,6 +413,29 @@ function haversineNm(float $lat1, float $lon1, float $lat2, float $lon2): float
     return $km / 1.852;
 }
 
+function buildEntryId(array $ac, float $lat, float $lon): ?string
+{
+    $hex = strtoupper(trim((string)($ac['hex'] ?? $ac['hexid'] ?? '')));
+    if ($hex !== '') {
+        return $hex;
+    }
+    $icao = strtoupper(trim((string)($ac['icao24'] ?? $ac['addr'] ?? $ac['hexid'] ?? '')));
+    $flight = strtoupper(trim((string)($ac['flight'] ?? $ac['callsign'] ?? '')));
+    if ($icao !== '' && $flight !== '') {
+        return $icao . '-' . $flight;
+    }
+    if ($icao !== '') {
+        return $icao;
+    }
+    if ($flight !== '') {
+        return $flight;
+    }
+    if (is_finite($lat) && is_finite($lon)) {
+        return sprintf('POS-%.4f-%.4f', $lat, $lon);
+    }
+    return null;
+}
+
 $storedSettings = loadStoredSettings($config);
 $lat = (float)$storedSettings['feed_center']['lat'];
 $lon = (float)$storedSettings['feed_center']['lon'];
@@ -592,7 +622,7 @@ $filteredByHex = [];
 $unfilteredByHex = [];
 $coordDecimals = (int)($config['coordinate_round_decimals'] ?? 3);
 $altThreshold = (int)($config['altitude_change_threshold_ft'] ?? 100);
-$cacheCleanupThreshold = (float)($config['cache_cleanup_threshold'] ?? 300.0);
+$cacheCleanupThreshold = (float)($config['cache_cleanup_threshold'] ?? ($config['target_ttl_s'] ?? 300.0));
 $filterLogger = static function (string $message): void {
     error_log($message);
 };
@@ -608,8 +638,9 @@ foreach ($data['ac'] as $ac) {
     }
     $acLat = (float)$ac['lat'];
     $acLon = (float)$ac['lon'];
-    $hex = strtoupper(trim((string)($ac['hex'] ?? '')));
-    if ($hex === '') {
+    $hex = strtoupper(trim((string)($ac['hex'] ?? $ac['hexid'] ?? '')));
+    $id = buildEntryId($ac, $acLat, $acLon);
+    if ($id === null) {
         continue;
     }
     $feedDistanceNm = haversineNm($acLat, $acLon, $feedLat, $feedLon);
@@ -640,7 +671,8 @@ foreach ($data['ac'] as $ac) {
     $feedDistanceRounded = round($feedDistanceNm, 1);
 
     $entry = [
-        'hex' => $hex,
+        'id' => $id,
+        'hex' => $hex !== '' ? $hex : null,
         'flight' => $flight,
         'reg' => isset($ac['r']) && trim((string)$ac['r']) !== '' ? strtoupper(trim((string)$ac['r'])) : null,
         'type' => isset($ac['t']) && trim((string)$ac['t']) !== '' ? strtoupper(trim((string)$ac['t'])) : null,
@@ -660,11 +692,11 @@ foreach ($data['ac'] as $ac) {
         'distance_ui_nm' => $distanceRounded,
         'distance_feed_nm' => $feedDistanceRounded,
     ];
-    if (!isset($unfilteredByHex[$hex])) {
-        $unfilteredByHex[$hex] = $entry;
+    if (!isset($unfilteredByHex[$id])) {
+        $unfilteredByHex[$id] = $entry;
     } else {
-        if (shouldReplaceEntry($unfilteredByHex[$hex], $entry, $altThreshold, $coordDecimals)) {
-            $unfilteredByHex[$hex] = $entry;
+        if (shouldReplaceEntry($unfilteredByHex[$id], $entry, $altThreshold, $coordDecimals)) {
+            $unfilteredByHex[$id] = $entry;
         }
     }
 
@@ -688,12 +720,12 @@ foreach ($data['ac'] as $ac) {
     }
 
     if ($borderFilterEnabled) {
-        if (!isset($filteredByHex[$hex])) {
-            $filteredByHex[$hex] = $entry;
+        if (!isset($filteredByHex[$id])) {
+            $filteredByHex[$id] = $entry;
             continue;
         }
-        if (shouldReplaceEntry($filteredByHex[$hex], $entry, $altThreshold, $coordDecimals)) {
-            $filteredByHex[$hex] = $entry;
+        if (shouldReplaceEntry($filteredByHex[$id], $entry, $altThreshold, $coordDecimals)) {
+            $filteredByHex[$id] = $entry;
         }
     }
 }

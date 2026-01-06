@@ -7,6 +7,34 @@ $config = require __DIR__ . '/config.php';
 require __DIR__ . '/auth.php';
 requireAuth($config);
 
+$base = '/' . trim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+if ($base === '/') {
+    $base = '/';
+} else {
+    $base .= '/';
+}
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$baseUrl = $scheme . '://' . $host . $base;
+
+function functionAvailable(string $name): bool
+{
+    if (!function_exists($name)) {
+        return false;
+    }
+    $disabled = ini_get('disable_functions');
+    if ($disabled === false || $disabled === '') {
+        return true;
+    }
+    $disabledList = array_map('trim', explode(',', $disabled));
+    return !in_array($name, $disabledList, true);
+}
+
+$gitPath = null;
+if (functionAvailable('shell_exec')) {
+    $gitPath = trim((string)shell_exec('command -v git 2>/dev/null')) ?: null;
+}
+
 $expectedFeed = [
     'lat' => '29.8839810',
     'lon' => '-114.0747826',
@@ -24,17 +52,12 @@ $feedCenterWarning = $feedCenterFixedOk
     ? null
     : 'FEED_CENTER mismatch: expected 29.8839810/-114.0747826 radius 250 NM.';
 
-$base = '/' . trim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-if ($base === '/') {
-    $base = '/';
-} else {
-    $base .= '/';
-}
 $apiBase = $base === '/' ? '/api/' : $base . 'api/';
 
 $dataDir = __DIR__ . '/data';
 $cacheDir = $config['feed_cache_dir'] ?? ($dataDir . '/cache');
 $dbPath = $config['settings_db'] ?? ($dataDir . '/adsb.sqlite');
+$geojsonDir = $config['geojson_dir'] ?? $dataDir;
 
 $sqliteAvailable = extension_loaded('sqlite3');
 $dataDirWritable = is_dir($dataDir) && is_writable($dataDir);
@@ -91,6 +114,15 @@ if ($latestCacheAge === null) {
 $allowUrlFopen = ini_get('allow_url_fopen');
 $allowUrlFopen = $allowUrlFopen !== false && $allowUrlFopen !== '' && $allowUrlFopen !== '0';
 $curlAvailable = function_exists('curl_init');
+if (function_exists('curl_version')) {
+    $curlAvailable = true;
+}
+
+$vatmexRepo = $config['vatmex_repo_dir'] ?? $config['vatmex_dir'] ?? null;
+$vatmexAirac = $config['vatmex_airac_dir'] ?? null;
+$airacCycle = $config['last_airac_cycle'] ?? null;
+$airacTokenConfigured = !empty($config['airac_update_token']);
+$airacAllowlist = $config['airac_update_ip_allowlist'] ?? [];
 
 $airacLogPath = $dataDir . '/airac_update.log';
 $airacStatus = null;
@@ -122,12 +154,22 @@ echo json_encode([
     'status' => $status,
     'app_base' => $base,
     'api_base' => $apiBase,
+    'base_url' => $baseUrl,
+    'script_name' => $_SERVER['SCRIPT_NAME'] ?? null,
+    'request_uri' => $_SERVER['REQUEST_URI'] ?? null,
     'php_version' => PHP_VERSION,
     'sqlite_available' => $sqliteAvailable,
     'writable' => [
         'data_dir' => $dataDirWritable,
         'cache_dir' => $cacheDirWritable,
         'sqlite_file' => $sqliteWritable,
+    ],
+    'endpoints' => [
+        'feed_exists' => is_file(__DIR__ . '/feed.php'),
+        'geojson_dir' => $geojsonDir,
+        'geojson_layers' => is_dir($geojsonDir) ? count(glob($geojsonDir . '/*.geojson') ?: []) : 0,
+        'leaflet_local_js' => is_file(__DIR__ . '/assets/vendor/leaflet/leaflet.js'),
+        'leaflet_local_css' => is_file(__DIR__ . '/assets/vendor/leaflet/leaflet.css'),
     ],
     'feed_center' => [
         'expected' => $expectedFeed,
@@ -153,6 +195,19 @@ echo json_encode([
         'last_update' => $airacStatus,
         'recent_runs' => $airacRecent,
         'log_path' => is_file($airacLogPath) ? $airacLogPath : null,
+        'update_enabled' => (bool)($config['airac_update_enabled'] ?? false),
+        'vatmex_repo_dir' => $vatmexRepo,
+        'vatmex_airac_dir' => $vatmexAirac,
+        'airac_cycle' => $airacCycle,
+        'admin_token_configured' => $airacTokenConfigured,
+        'ip_allowlist' => $airacAllowlist,
+    ],
+    'exec' => [
+        'proc_open' => functionAvailable('proc_open'),
+        'exec' => functionAvailable('exec'),
+        'shell_exec' => functionAvailable('shell_exec'),
+        'php_binary' => PHP_BINARY,
+        'git_path' => $gitPath,
     ],
     'warnings' => $warnings,
     'now' => date('c'),
