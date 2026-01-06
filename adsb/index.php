@@ -577,8 +577,11 @@ if (is_dir($geojsonDir)) {
             <div class="settings-section">
                 <strong>AIRAC / VATMEX</strong>
                 <div style="margin-top:6px;">
-                    <button id="airacUpdateBtn" style="width:100%;display:none;">UPDATE AIRAC (PULL VATMEX + REBUILD GEOJSON)</button>
+                    <button id="airacUpdateBtn" style="width:100%;">UPDATE AIRAC (PULL VATMEX + REBUILD GEOJSON)</button>
                     <span id="airacSpinner" class="spinner" style="display:none;"></span>
+                </div>
+                <div id="airacHint" style="margin-top:6px;font-size:12px;color:#9fb3c8;">
+                    Configura <code>vatmex_dir</code> y habilita <code>airac_update_enabled</code> en <code>config.php</code> para activar el botón.
                 </div>
                 <div id="airacConsole" class="console-box" style="margin-top:6px;display:none;"></div>
             </div>
@@ -599,7 +602,16 @@ if (is_dir($geojsonDir)) {
         }
         return `/${trimmed}/`;
     }
-    const ADSB_BASE = normalizeBasePath(window.ADSB_BASE || window.ADSB_BASE_PATH || '/');
+    function detectBasePath() {
+        const path = window.location.pathname || '/';
+        if (path.endsWith('/')) {
+            return path;
+        }
+        const parts = path.split('/');
+        parts.pop();
+        return `${parts.join('/')}/`;
+    }
+    const ADSB_BASE = normalizeBasePath(window.ADSB_BASE || window.ADSB_BASE_PATH || detectBasePath());
     const authToken = new URLSearchParams(window.location.search).get('token');
     function appendAuthToken(url) {
         if (!authToken) {
@@ -663,9 +675,100 @@ if (is_dir($geojsonDir)) {
         feedCenterWarning: null,
     };
 
+    const defaultSettings = {
+        airport: {
+            icao: '<?php echo addslashes($config['airport']['icao']); ?>',
+        },
+        feed_center: {
+            lat: <?php echo (float)($config['feed_center']['lat'] ?? $config['airport']['lat']); ?>,
+            lon: <?php echo (float)($config['feed_center']['lon'] ?? $config['airport']['lon']); ?>,
+            radius_nm: <?php echo (float)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250); ?>,
+        },
+        ui_center: {
+            lat: <?php echo (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>,
+            lon: <?php echo (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>,
+        },
+        poll_interval_ms: <?php echo (int)$config['poll_interval_ms']; ?>,
+        rings: {
+            distances: [50, 100, 150, 200, 250],
+            style: {
+                color: '#6666ff',
+                weight: 1,
+                dash: '6 6',
+            },
+        },
+        labels: {
+            show_alt: true,
+            show_gs: true,
+            show_vs: true,
+            show_trk: true,
+            show_sqk: true,
+            show_labels: true,
+            min_zoom: 7,
+            font_size: 12,
+            color: '#00ff00',
+        },
+        display: {
+            basemap: 'dark',
+        },
+        navpoints: {
+            enabled: true,
+            min_zoom: 7,
+            zone: 'all',
+            max_points: 2000,
+        },
+        category_styles: {
+            default: {
+                color: '#3aa0ff',
+                weight: 1.5,
+                dash: '',
+            },
+        },
+    };
+
+    const expectedFeedCenter = {
+        lat: 29.8839810,
+        lon: -114.0747826,
+        radius_nm: 250,
+    };
+
+    function getDefaultSettings() {
+        return JSON.parse(JSON.stringify(defaultSettings));
+    }
+
+    let settings = window.settings || getDefaultSettings();
+    window.settings = settings;
+
+    function safeLoadStoredSettings() {
+        try {
+            const raw = localStorage.getItem('adsb_settings');
+            if (!raw) {
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+                settings = normalizeSettingsPayload(parsed);
+                window.settings = settings;
+            }
+        } catch (err) {
+            console.warn('Failed to load stored settings', err);
+        }
+    }
+
+    safeLoadStoredSettings();
+
+    function safeStoreSettings() {
+        try {
+            localStorage.setItem('adsb_settings', JSON.stringify(settings));
+        } catch (err) {
+            console.warn('Failed to store settings locally', err);
+        }
+    }
+
     function renderDiagnostics() {
-        const feedCenter = settings && settings.feed_center ? settings.feed_center : defaultSettings.feed_center;
-        const uiCenter = settings && settings.ui_center ? settings.ui_center : defaultSettings.ui_center;
+        const s = window.settings || settings || getDefaultSettings();
+        const feedCenter = s && s.feed_center ? s.feed_center : defaultSettings.feed_center;
+        const uiCenter = s && s.ui_center ? s.ui_center : defaultSettings.ui_center;
         const feedFixedOk = Number(feedCenter.lat.toFixed(7)) === Number(expectedFeedCenter.lat.toFixed(7))
             && Number(feedCenter.lon.toFixed(7)) === Number(expectedFeedCenter.lon.toFixed(7))
             && Number(feedCenter.radius_nm) === expectedFeedCenter.radius_nm;
@@ -955,6 +1058,8 @@ if (is_dir($geojsonDir)) {
     const navpointsLayer = L.layerGroup();
     let navpointsRequest = null;
     let navpointsLastWarning = 0;
+    let navpointsGeojson = null;
+    let navpointsGeojsonLoaded = false;
     const navpointColour = '#ffd166';
     function buildNavpointIcon() {
         return L.divIcon({
@@ -965,8 +1070,162 @@ if (is_dir($geojsonDir)) {
         });
     }
 
+    const tmaLayer = L.geoJSON(null, {
+        style: {
+            color: '#5ec8ff',
+            weight: 2,
+            fill: false,
+        },
+    });
+    const procedureLayers = {
+        sid: L.geoJSON(null, { style: { color: '#ff9f1c', weight: 2, dashArray: '6 6' } }),
+        star: L.geoJSON(null, { style: { color: '#2ec4b6', weight: 2, dashArray: '2 6' } }),
+        app: L.geoJSON(null, { style: { color: '#e71d36', weight: 2, dashArray: '1 0' } }),
+    };
+    let tmaLoaded = false;
+    let proceduresLoaded = false;
+
+    function addLayerToggle(labelText, layer, options = {}) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'layer-control';
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !!options.checked;
+        checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+                layer.addTo(map);
+                if (typeof options.onEnable === 'function') {
+                    options.onEnable();
+                }
+            } else {
+                map.removeLayer(layer);
+                if (typeof options.onDisable === 'function') {
+                    options.onDisable();
+                }
+            }
+        });
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(` ${labelText}`));
+        wrapper.appendChild(label);
+        layerControlsDiv.appendChild(wrapper);
+        return checkbox;
+    }
+
+    function loadNavpointsGeojson() {
+        if (navpointsGeojsonLoaded) {
+            return Promise.resolve(navpointsGeojson);
+        }
+        navpointsGeojsonLoaded = true;
+        const url = buildUrl('assets/data/nav-points.geojson');
+        return fetchGeoJson(url, `Navpoints layer (${url})`)
+            .then(data => {
+                navpointsGeojson = data;
+                return data;
+            })
+            .catch(err => {
+                navpointsGeojsonLoaded = false;
+                reportError('Failed to load navpoints layer', formatFetchErrorDetail(err, url));
+                return null;
+            });
+    }
+
+    function loadTmaLayer() {
+        if (tmaLoaded) {
+            return Promise.resolve();
+        }
+        const url = buildUrl('assets/data/tma-tijuana.geojson');
+        return fetchGeoJson(url, `TMA layer (${url})`)
+            .then(data => {
+                tmaLayer.clearLayers();
+                tmaLayer.addData(normalizeGeojson(data, { forcePolygon: true }));
+                tmaLoaded = true;
+            })
+            .catch(err => {
+                reportError('Failed to load TMA layer', formatFetchErrorDetail(err, url));
+            });
+    }
+
+    function loadProcedureLayers() {
+        if (proceduresLoaded) {
+            return Promise.resolve();
+        }
+        const url = buildUrl('assets/data/procedures-tijuana.geojson');
+        return fetchGeoJson(url, `Procedures layer (${url})`)
+            .then(data => {
+                Object.values(procedureLayers).forEach(layer => layer.clearLayers());
+                const features = (data && data.features) ? data.features : [];
+                features.forEach(feature => {
+                    const kind = (feature.properties && feature.properties.kind ? feature.properties.kind : 'other').toLowerCase();
+                    if (kind === 'sid') {
+                        procedureLayers.sid.addData(feature);
+                    } else if (kind === 'star') {
+                        procedureLayers.star.addData(feature);
+                    } else {
+                        procedureLayers.app.addData(feature);
+                    }
+                });
+                proceduresLoaded = true;
+            })
+            .catch(err => {
+                reportError('Failed to load procedures layer', formatFetchErrorDetail(err, url));
+            });
+    }
+
     // Create layer controls in the sidebar
     const layerControlsDiv = document.getElementById('layerControls');
+    const vatmexHeader = document.createElement('div');
+    vatmexHeader.className = 'layer-control';
+    vatmexHeader.innerHTML = '<strong>VATMEX Overlays</strong>';
+    layerControlsDiv.appendChild(vatmexHeader);
+
+    const navpointsToggle = addLayerToggle('NAV Points', navpointsLayer, {
+        checked: settings.navpoints.enabled,
+        onEnable: () => {
+            settings.navpoints.enabled = true;
+            updateNavpoints();
+        },
+        onDisable: () => {
+            settings.navpoints.enabled = false;
+            navpointsLayer.clearLayers();
+        },
+    });
+    addLayerToggle('TMA', tmaLayer, {
+        onEnable: () => {
+            loadTmaLayer().then(() => {
+                if (!map.hasLayer(tmaLayer)) {
+                    tmaLayer.addTo(map);
+                }
+            });
+        },
+    });
+    addLayerToggle('SID', procedureLayers.sid, {
+        onEnable: () => {
+            loadProcedureLayers().then(() => {
+                if (!map.hasLayer(procedureLayers.sid)) {
+                    procedureLayers.sid.addTo(map);
+                }
+            });
+        },
+    });
+    addLayerToggle('STAR', procedureLayers.star, {
+        onEnable: () => {
+            loadProcedureLayers().then(() => {
+                if (!map.hasLayer(procedureLayers.star)) {
+                    procedureLayers.star.addTo(map);
+                }
+            });
+        },
+    });
+    addLayerToggle('APP', procedureLayers.app, {
+        onEnable: () => {
+            loadProcedureLayers().then(() => {
+                if (!map.hasLayer(procedureLayers.app)) {
+                    procedureLayers.app.addTo(map);
+                }
+            });
+        },
+    });
     Object.keys(geojsonLayers).forEach(id => {
         // Default random colour for each layer
         const defaultColour = '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
@@ -1126,45 +1385,103 @@ if (is_dir($geojsonDir)) {
         }
         const bbox = navpointsZoneBounds();
         const limit = settings.navpoints.max_points || 2000;
-        const url = apiUrl('navpoints.php')
-            + `?north=${encodeURIComponent(bbox.north)}`
-            + `&south=${encodeURIComponent(bbox.south)}`
-            + `&east=${encodeURIComponent(bbox.east)}`
-            + `&west=${encodeURIComponent(bbox.west)}`
-            + `&limit=${encodeURIComponent(limit)}`;
-        if (navpointsRequest) {
-            navpointsRequest.abort();
-        }
-        navpointsRequest = new AbortController();
-        fetchJson(url, { signal: navpointsRequest.signal }, 'Navpoints request')
-            .then(data => {
-                navpointsLayer.clearLayers();
-                const normalized = normalizeGeojson(data);
-                const icon = buildNavpointIcon();
-                L.geoJSON(normalized, {
-                    pointToLayer: (feature, latlng) => {
-                        return L.marker(latlng, {
-                            icon,
-                            pane: 'overlayPane',
+        if (navpointsGeojson) {
+            navpointsLayer.clearLayers();
+            const normalized = normalizeGeojson(navpointsGeojson);
+            const icon = buildNavpointIcon();
+            let total = 0;
+            let added = 0;
+            L.geoJSON(normalized, {
+                pointToLayer: (feature, latlng) => {
+                    return L.marker(latlng, {
+                        icon,
+                        pane: 'overlayPane',
+                    });
+                },
+                onEachFeature: (feature, layerEl) => {
+                    if (!layerEl) {
+                        return;
+                    }
+                    const name = feature.properties && (feature.properties.id || feature.properties.name);
+                    if (name && settings.labels.show_labels && map.getZoom() >= settings.labels.min_zoom) {
+                        layerEl.bindTooltip(String(name), {
+                            permanent: false,
+                            direction: 'top',
+                            offset: [0, -6],
                         });
-                    },
-                    onEachFeature: (feature, layerEl) => {
-                        const name = feature.properties && (feature.properties.id || feature.properties.name);
-                        if (name && settings.labels.show_labels && map.getZoom() >= settings.labels.min_zoom) {
-                            layerEl.bindTooltip(String(name), {
-                                permanent: false,
-                                direction: 'top',
-                                offset: [0, -6],
+                    }
+                },
+                filter: (feature) => {
+                    const coords = feature.geometry && feature.geometry.coordinates;
+                    if (!Array.isArray(coords) || coords.length < 2) {
+                        return false;
+                    }
+                    const normalizedCoord = normalizeLonLat(coords);
+                    const lon = normalizedCoord[0];
+                    const lat = normalizedCoord[1];
+                    if (lat < bbox.south || lat > bbox.north || lon < bbox.west || lon > bbox.east) {
+                        return false;
+                    }
+                    total++;
+                    if (added >= limit) {
+                        return false;
+                    }
+                    added++;
+                    return true;
+                },
+            }).addTo(navpointsLayer);
+            if (total > limit && Date.now() - navpointsLastWarning > 5000) {
+                navpointsLastWarning = Date.now();
+                showNotification('Límite de navpoints alcanzado; acércate para más detalle.');
+            }
+            return;
+        }
+
+        loadNavpointsGeojson().then(data => {
+            if (data) {
+                updateNavpoints();
+                return;
+            }
+            const url = apiUrl('navpoints.php')
+                + `?north=${encodeURIComponent(bbox.north)}`
+                + `&south=${encodeURIComponent(bbox.south)}`
+                + `&east=${encodeURIComponent(bbox.east)}`
+                + `&west=${encodeURIComponent(bbox.west)}`
+                + `&limit=${encodeURIComponent(limit)}`;
+            if (navpointsRequest) {
+                navpointsRequest.abort();
+            }
+            navpointsRequest = new AbortController();
+            fetchJson(url, { signal: navpointsRequest.signal }, 'Navpoints request')
+                .then(data => {
+                    navpointsLayer.clearLayers();
+                    const normalized = normalizeGeojson(data);
+                    const icon = buildNavpointIcon();
+                    L.geoJSON(normalized, {
+                        pointToLayer: (feature, latlng) => {
+                            return L.marker(latlng, {
+                                icon,
+                                pane: 'overlayPane',
                             });
-                        }
-                    },
-                }).addTo(navpointsLayer);
-                if (data.meta && data.meta.truncated && Date.now() - navpointsLastWarning > 5000) {
-                    navpointsLastWarning = Date.now();
-                    showNotification('Límite de navpoints alcanzado; acércate para más detalle.');
-                }
-            })
-            .catch(() => {});
+                        },
+                        onEachFeature: (feature, layerEl) => {
+                            const name = feature.properties && (feature.properties.id || feature.properties.name);
+                            if (name && settings.labels.show_labels && map.getZoom() >= settings.labels.min_zoom) {
+                                layerEl.bindTooltip(String(name), {
+                                    permanent: false,
+                                    direction: 'top',
+                                    offset: [0, -6],
+                                });
+                            }
+                        },
+                    }).addTo(navpointsLayer);
+                    if (data.meta && data.meta.truncated && Date.now() - navpointsLastWarning > 5000) {
+                        navpointsLastWarning = Date.now();
+                        showNotification('Límite de navpoints alcanzado; acércate para más detalle.');
+                    }
+                })
+                .catch(() => {});
+        });
     }
 
     let navpointsTimer = null;
@@ -1224,64 +1541,6 @@ if (is_dir($geojsonDir)) {
         ].join('\n');
     }
 
-    const defaultSettings = {
-        airport: {
-            icao: '<?php echo addslashes($config['airport']['icao']); ?>',
-        },
-        feed_center: {
-            lat: <?php echo (float)($config['feed_center']['lat'] ?? $config['airport']['lat']); ?>,
-            lon: <?php echo (float)($config['feed_center']['lon'] ?? $config['airport']['lon']); ?>,
-            radius_nm: <?php echo (float)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250); ?>,
-        },
-        ui_center: {
-            lat: <?php echo (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>,
-            lon: <?php echo (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>,
-        },
-        poll_interval_ms: <?php echo (int)$config['poll_interval_ms']; ?>,
-        rings: {
-            distances: [50, 100, 150, 200, 250],
-            style: {
-                color: '#6666ff',
-                weight: 1,
-                dash: '6 6',
-            },
-        },
-        labels: {
-            show_alt: true,
-            show_gs: true,
-            show_vs: true,
-            show_trk: true,
-            show_sqk: true,
-            show_labels: true,
-            min_zoom: 7,
-            font_size: 12,
-            color: '#00ff00',
-        },
-        display: {
-            basemap: 'dark',
-        },
-        navpoints: {
-            enabled: true,
-            min_zoom: 7,
-            zone: 'all',
-            max_points: 2000,
-        },
-        category_styles: {
-            default: {
-                color: '#3aa0ff',
-                weight: 1.5,
-                dash: '',
-            },
-        },
-    };
-
-    const expectedFeedCenter = {
-        lat: 29.8839810,
-        lon: -114.0747826,
-        radius_nm: 250,
-    };
-
-    let settings = JSON.parse(JSON.stringify(defaultSettings));
     let airacUpdateEnabled = false;
     let vatmexDirConfigured = false;
 
@@ -1298,6 +1557,9 @@ if (is_dir($geojsonDir)) {
         switchBasemap(settings.display && settings.display.basemap ? settings.display.basemap : 'dark');
         updateLabelVisibility();
         updateNavpoints();
+        if (typeof navpointsToggle !== 'undefined') {
+            navpointsToggle.checked = settings.navpoints.enabled;
+        }
     }
 
     // Create or refresh range rings around the primary airport
@@ -2726,6 +2988,7 @@ if (is_dir($geojsonDir)) {
     const airacUpdateBtn = document.getElementById('airacUpdateBtn');
     const airacSpinner = document.getElementById('airacSpinner');
     const airacConsole = document.getElementById('airacConsole');
+    const airacHint = document.getElementById('airacHint');
     const sidebarToggle = document.getElementById('sidebarToggle');
     function hideDiagnostics() {
         diagnosticsDismissed = true;
@@ -2736,6 +2999,16 @@ if (is_dir($geojsonDir)) {
         diagnosticsDismissed = false;
         renderDiagnostics();
         errorOverlay.style.display = 'block';
+    }
+
+    function updateAiracUi() {
+        const airacReady = airacUpdateEnabled && vatmexDirConfigured;
+        airacUpdateBtn.disabled = !airacReady;
+        if (airacHint) {
+            airacHint.textContent = airacReady
+                ? 'Listo para actualizar AIRAC desde VATMEX.'
+                : 'Configura vatmex_dir y habilita airac_update_enabled en config.php para activar el botón.';
+        }
     }
 
     diagnosticsClose.addEventListener('click', () => {
@@ -2791,7 +3064,7 @@ if (is_dir($geojsonDir)) {
         document.getElementById('navpointsMinZoom').value = settings.navpoints.min_zoom;
         document.getElementById('navpointsZone').value = settings.navpoints.zone;
         document.getElementById('navpointsMax').value = settings.navpoints.max_points;
-        airacUpdateBtn.style.display = (airacUpdateEnabled && vatmexDirConfigured) ? 'inline-block' : 'none';
+        updateAiracUi();
     });
     // Apply settings on button click
     document.getElementById('applySettings').addEventListener('click', () => {
@@ -2836,7 +3109,10 @@ if (is_dir($geojsonDir)) {
                     settings = normalizeSettingsPayload(data.settings);
                     airacUpdateEnabled = !!data.airac_update_enabled;
                     vatmexDirConfigured = !!data.vatmex_dir_configured;
+                    window.settings = settings;
+                    safeStoreSettings();
                     applySettings();
+                    updateAiracUi();
                     startPolling();
                     settingsPanel.style.display = 'none';
                     settingsToggle.textContent = 'Open Settings';
@@ -2857,7 +3133,10 @@ if (is_dir($geojsonDir)) {
                 ensureCenters();
                 airacUpdateEnabled = !!data.airac_update_enabled;
                 vatmexDirConfigured = !!data.vatmex_dir_configured;
+                window.settings = settings;
+                safeStoreSettings();
                 applySettings();
+                updateAiracUi();
                 loadStates();
                 loadStrips();
                 startPolling();
@@ -2866,6 +3145,7 @@ if (is_dir($geojsonDir)) {
                 ensureCenters();
                 applySettings();
                 vatmexDirConfigured = false;
+                updateAiracUi();
                 loadStates();
                 loadStrips();
                 startPolling();
