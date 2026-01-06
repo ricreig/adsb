@@ -3,7 +3,7 @@
 // Adjust these values to suit your environment.  All files and endpoints
 // referenced here are relative to the root of the project directory.
 
-return [
+$config = [
     // Primary airport reference (UI only).
     'airport' => [
         'icao' => 'MMZT',
@@ -95,10 +95,22 @@ return [
     'settings_db' => __DIR__ . '/data/adsb.sqlite',
     // Polling interval for the frontend (milliseconds).
     'poll_interval_ms' => 1500,
+    // Client TTL for stale targets (seconds).
+    'target_ttl_s' => 120,
+    // Track history defaults.
+    'track_history_max_points' => 80,
+    'track_history_max_age_s' => 300,
 
     // VATMEX AIRAC update settings. The directory is configured on the server.
     'vatmex_dir' => null,
+    // VATMEX repo root (used for git pull). If omitted, vatmex_dir is used.
+    'vatmex_repo_dir' => null,
+    // Detected AIRAC data directory inside VATMEX (auto-updated by updater).
+    'vatmex_airac_dir' => null,
     'airac_update_enabled' => false,
+    // Admin protection for AIRAC update (optional).
+    'airac_update_token' => null,
+    'airac_update_ip_allowlist' => [],
 
     // Optional API key for flight plan lookups.  Some services require a
     // token – configure it here and implement the lookup in get_flight_plan().
@@ -117,3 +129,13 @@ return [
         'token' => null,
     ],
 ];
+
+$runtimeOverride = __DIR__ . '/data/runtime_config.php';
+if (is_file($runtimeOverride)) {
+    $overrides = require $runtimeOverride;
+    if (is_array($overrides)) {
+        $config = array_replace_recursive($config, $overrides);
+    }
+}
+
+return $config;

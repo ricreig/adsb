@@ -309,10 +309,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             ':updated_at' => gmdate('c'),
         ]);
     }
+    $vatmexRepo = $config['vatmex_repo_dir'] ?? $config['vatmex_dir'] ?? null;
+    $airacDir = $config['vatmex_airac_dir'] ?? null;
+    $airacCycle = $config['last_airac_cycle'] ?? null;
     respond([
         'settings' => $settings,
         'airac_update_enabled' => (bool)$config['airac_update_enabled'],
         'vatmex_dir_configured' => !empty($config['vatmex_dir']),
+        'vatmex_repo_configured' => !empty($vatmexRepo),
+        'vatmex_airac_configured' => !empty($airacDir),
+        'airac_cycle' => $airacCycle,
     ]);
 }
 
@@ -339,11 +345,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ':data' => json_encode($settings, JSON_UNESCAPED_SLASHES),
         ':updated_at' => gmdate('c'),
     ]);
+    $vatmexRepo = $config['vatmex_repo_dir'] ?? $config['vatmex_dir'] ?? null;
+    $airacDir = $config['vatmex_airac_dir'] ?? null;
+    $airacCycle = $config['last_airac_cycle'] ?? null;
 
     respond([
         'settings' => $settings,
         'airac_update_enabled' => (bool)$config['airac_update_enabled'],
         'vatmex_dir_configured' => !empty($config['vatmex_dir']),
+        'vatmex_repo_configured' => !empty($vatmexRepo),
+        'vatmex_airac_configured' => !empty($airacDir),
+        'airac_cycle' => $airacCycle,
     ]);
 }
 

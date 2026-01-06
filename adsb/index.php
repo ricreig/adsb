@@ -581,7 +581,7 @@ if (is_dir($geojsonDir)) {
                     <span id="airacSpinner" class="spinner" style="display:none;"></span>
                 </div>
                 <div id="airacHint" style="margin-top:6px;font-size:12px;color:#9fb3c8;">
-                    Configura <code>vatmex_dir</code> y habilita <code>airac_update_enabled</code> en <code>config.php</code> para activar el botón.
+                    Configura <code>vatmex_repo_dir</code> (o <code>vatmex_dir</code>) y habilita <code>airac_update_enabled</code> en <code>config.php</code> para activar el botón.
                 </div>
                 <div id="airacConsole" class="console-box" style="margin-top:6px;display:none;"></div>
             </div>
@@ -673,6 +673,7 @@ if (is_dir($geojsonDir)) {
         feedStatus: 'unknown',
         feedUpdatedAt: null,
         feedCenterWarning: null,
+        lastFeedError: null,
     };
 
     const defaultSettings = {
@@ -732,6 +733,10 @@ if (is_dir($geojsonDir)) {
         radius_nm: 250,
     };
 
+    const targetTtlMs = <?php echo (int)($config['target_ttl_s'] ?? 120); ?> * 1000;
+    const trackHistoryMaxPoints = <?php echo (int)($config['track_history_max_points'] ?? 80); ?>;
+    const trackHistoryMaxAgeMs = <?php echo (int)($config['track_history_max_age_s'] ?? 300); ?> * 1000;
+
     function getDefaultSettings() {
         return JSON.parse(JSON.stringify(defaultSettings));
     }
@@ -783,6 +788,8 @@ if (is_dir($geojsonDir)) {
             diagnostics.leafletUrl ? `Leaflet URL: ${diagnostics.leafletUrl}` : null,
             `Feed: ${diagnostics.feedStatus}`,
             diagnostics.feedUpdatedAt ? `Feed updated: ${diagnostics.feedUpdatedAt}` : null,
+            diagnostics.lastFeedError ? `Last feed error (${diagnostics.lastFeedError.at}): ${diagnostics.lastFeedError.message}` : null,
+            diagnostics.lastFeedError && diagnostics.lastFeedError.detail ? `Feed error detail: ${diagnostics.lastFeedError.detail}` : null,
         ].filter(Boolean);
         if (errorLog.length) {
             lines.push('', 'Errors:', ...errorLog);
@@ -795,6 +802,18 @@ if (is_dir($geojsonDir)) {
         errorLog.push(line);
         diagnosticsDismissed = false;
         renderDiagnostics();
+    }
+
+    function setFeedError(message, detail) {
+        diagnostics.lastFeedError = {
+            message: message || 'Feed error',
+            detail: detail || '',
+            at: new Date().toISOString(),
+        };
+    }
+
+    function clearFeedError() {
+        diagnostics.lastFeedError = null;
     }
 
     window.addEventListener('error', (event) => {
@@ -1543,6 +1562,9 @@ if (is_dir($geojsonDir)) {
 
     let airacUpdateEnabled = false;
     let vatmexDirConfigured = false;
+    let vatmexRepoConfigured = false;
+    let vatmexAiracConfigured = false;
+    let airacCycle = null;
 
     // Range ring overlay container
     let rangeRings = [];
@@ -1656,6 +1678,10 @@ if (is_dir($geojsonDir)) {
     }
 
     function buildAircraftId(ac) {
+        const explicitId = normalizeIdPart(ac.id || ac._id);
+        if (explicitId) {
+            return explicitId;
+        }
         const hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid);
         if (hex) {
             return hex;
@@ -2169,11 +2195,10 @@ if (is_dir($geojsonDir)) {
                 state.history.push({ lat: ac.lat, lon: ac.lon, ts: now, track: ac.track || 0 });
             }
         }
-        const cutoff = now - 5 * 60 * 1000;
+        const cutoff = now - trackHistoryMaxAgeMs;
         state.history = state.history.filter(pt => pt.ts >= cutoff);
-        const maxPoints = 80;
-        if (state.history.length > maxPoints) {
-            state.history = state.history.slice(state.history.length - maxPoints);
+        if (state.history.length > trackHistoryMaxPoints) {
+            state.history = state.history.slice(state.history.length - trackHistoryMaxPoints);
         }
         return state.history;
     }
@@ -2325,9 +2350,9 @@ if (is_dir($geojsonDir)) {
             if (!state || !state.lastUpdate) {
                 return;
             }
-            if (now - state.lastUpdate <= 90 * 1000) {
-                return;
-            }
+        if (now - state.lastUpdate <= targetTtlMs) {
+            return;
+        }
             removeFlight(id);
         });
     }
@@ -2896,6 +2921,7 @@ if (is_dir($geojsonDir)) {
                     const message = (data && data.error) ? data.error : 'Upstream feed unavailable.';
                     updateFeedStatus('ERROR', message);
                     reportError('Feed error', message);
+                    setFeedError(message, data && data.upstream_http ? `HTTP ${data.upstream_http}` : '');
                     pollBackoffIndex = Math.min(pollBackoffIndex + 1, pollBackoffSteps.length - 1);
                     return;
                 }
@@ -2915,9 +2941,15 @@ if (is_dir($geojsonDir)) {
                     ? ''
                     : (cacheStale ? 'Feed cache stale.' : (hasError ? data.error : `Upstream HTTP ${data.upstream_http}`));
                 updateFeedStatus(feedStatus, warningMessage);
+                if (feedStatus !== 'OK') {
+                    setFeedError(warningMessage || 'Feed degraded', warningMessage);
+                } else {
+                    clearFeedError();
+                }
                 const seenIds = new Set();
                 const now = Date.now();
-                const missingGraceMs = Math.max(6000, (settings.poll_interval_ms || 1500) * 6);
+                const observedAt = Number.isFinite(data.generated_at_ms) ? data.generated_at_ms : now;
+                const missingGraceMs = Math.max(targetTtlMs, (settings.poll_interval_ms || 1500) * 6);
                 (data.ac || []).forEach(ac => {
                     if (!ac) {
                         return;
@@ -2929,6 +2961,10 @@ if (is_dir($geojsonDir)) {
                     }
                     ac.lat = lat;
                     ac.lon = lon;
+                    const seenPos = coerceNumber(ac.seen_pos);
+                    if (seenPos !== null && seenPos * 1000 > targetTtlMs) {
+                        return;
+                    }
                     ac.hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid) || null;
                     const flightId = buildAircraftId(ac);
                     if (!flightId) {
@@ -2938,7 +2974,8 @@ if (is_dir($geojsonDir)) {
                     seenIds.add(flightId);
                     const previous = flights[flightId] || {};
                     const note = previous.note || noteStore[flightId] || stripNotes[flightId] || ac.note || '';
-                    flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: now };
+                    const lastSeen = seenPos !== null ? observedAt - (seenPos * 1000) : now;
+                    flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: lastSeen };
                     renderFlight(flights[flightId]);
                     stripDataCache[flightId] = flights[flightId];
                 });
@@ -2961,6 +2998,7 @@ if (is_dir($geojsonDir)) {
                 }
                 console.error('Error fetching feed:', err);
                 updateFeedStatus('ERROR', 'Feed error – check diagnostics.');
+                setFeedError('Feed request failed', err && err.message ? err.message : String(err || 'Unknown error'));
                 pollBackoffIndex = Math.min(pollBackoffIndex + 1, pollBackoffSteps.length - 1);
             })
             .finally(() => {
@@ -3002,12 +3040,12 @@ if (is_dir($geojsonDir)) {
     }
 
     function updateAiracUi() {
-        const airacReady = airacUpdateEnabled && vatmexDirConfigured;
+        const airacReady = airacUpdateEnabled && (vatmexRepoConfigured || vatmexDirConfigured);
         airacUpdateBtn.disabled = !airacReady;
         if (airacHint) {
             airacHint.textContent = airacReady
-                ? 'Listo para actualizar AIRAC desde VATMEX.'
-                : 'Configura vatmex_dir y habilita airac_update_enabled en config.php para activar el botón.';
+                ? `Listo para actualizar AIRAC desde VATMEX${airacCycle ? ` (AIRAC ${airacCycle})` : ''}.`
+                : 'Configura vatmex_repo_dir/vatmex_dir y habilita airac_update_enabled en config.php para activar el botón.';
         }
     }
 
@@ -3109,6 +3147,9 @@ if (is_dir($geojsonDir)) {
                     settings = normalizeSettingsPayload(data.settings);
                     airacUpdateEnabled = !!data.airac_update_enabled;
                     vatmexDirConfigured = !!data.vatmex_dir_configured;
+                    vatmexRepoConfigured = !!data.vatmex_repo_configured;
+                    vatmexAiracConfigured = !!data.vatmex_airac_configured;
+                    airacCycle = data.airac_cycle || null;
                     window.settings = settings;
                     safeStoreSettings();
                     applySettings();
@@ -3133,6 +3174,9 @@ if (is_dir($geojsonDir)) {
                 ensureCenters();
                 airacUpdateEnabled = !!data.airac_update_enabled;
                 vatmexDirConfigured = !!data.vatmex_dir_configured;
+                vatmexRepoConfigured = !!data.vatmex_repo_configured;
+                vatmexAiracConfigured = !!data.vatmex_airac_configured;
+                airacCycle = data.airac_cycle || null;
                 window.settings = settings;
                 safeStoreSettings();
                 applySettings();
@@ -3145,6 +3189,9 @@ if (is_dir($geojsonDir)) {
                 ensureCenters();
                 applySettings();
                 vatmexDirConfigured = false;
+                vatmexRepoConfigured = false;
+                vatmexAiracConfigured = false;
+                airacCycle = null;
                 updateAiracUi();
                 loadStates();
                 loadStrips();
@@ -3153,7 +3200,7 @@ if (is_dir($geojsonDir)) {
     }
 
     airacUpdateBtn.addEventListener('click', () => {
-        if (!airacUpdateEnabled || !vatmexDirConfigured) {
+        if (!airacUpdateEnabled || !(vatmexRepoConfigured || vatmexDirConfigured)) {
             return;
         }
         airacSpinner.style.display = 'inline-block';
@@ -3166,17 +3213,22 @@ if (is_dir($geojsonDir)) {
                     `Exit code: ${data.exit_code}`,
                     `Started: ${data.started_at}`,
                     `Finished: ${data.finished_at}`,
+                    data.airac_cycle ? `AIRAC: ${data.airac_cycle}` : null,
+                    data.vatmex_repo_dir ? `VATMEX repo: ${data.vatmex_repo_dir}` : null,
+                    data.vatmex_airac_dir ? `VATMEX AIRAC dir: ${data.vatmex_airac_dir}` : null,
                     '',
                     'STDOUT:',
                     data.stdout || '(empty)',
                     '',
                     'STDERR:',
                     data.stderr || '(empty)',
-                ].join('\n');
+                ].filter(Boolean).join('\n');
                 airacConsole.textContent = output;
             })
-            .catch(() => {
-                airacConsole.textContent = 'AIRAC update failed to start.';
+            .catch(err => {
+                const message = err && err.message ? err.message : 'AIRAC update failed to start.';
+                const detail = err && err.body ? err.body : '';
+                airacConsole.textContent = [message, detail].filter(Boolean).join('\n');
             })
             .finally(() => {
                 airacSpinner.style.display = 'none';

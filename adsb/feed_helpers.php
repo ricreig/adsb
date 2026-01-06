@@ -69,7 +69,7 @@ function dedupeEntries(array $entries, int $altThreshold = 100, int $coordDecima
 {
     $byHex = [];
     foreach ($entries as $entry) {
-        $hex = strtoupper(trim((string)($entry['hex'] ?? '')));
+        $hex = strtoupper(trim((string)($entry['id'] ?? $entry['hex'] ?? '')));
         if ($hex === '') {
             continue;
         }
@@ -90,7 +90,7 @@ function logFilterDiscard(callable $logger, array $entry, string $reason): void
     $message = sprintf(
         'filter_discard reason=%s hex=%s flight=%s lat=%s lon=%s alt=%s seen_pos=%s',
         $reason,
-        $entry['hex'] ?? 'UNKNOWN',
+        $entry['id'] ?? ($entry['hex'] ?? 'UNKNOWN'),
         $entry['flight'] ?? 'UNKNOWN',
         isset($entry['lat']) ? number_format((float)$entry['lat'], 6, '.', '') : 'UNKNOWN',
         isset($entry['lon']) ? number_format((float)$entry['lon'], 6, '.', '') : 'UNKNOWN',
