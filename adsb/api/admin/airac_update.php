@@ -67,6 +67,15 @@ $commands = [
         ),
     ],
     [
+        'label' => 'build_geojson',
+        'command' => sprintf(
+            '%s %s %s',
+            escapeshellcmd(PHP_BINARY),
+            escapeshellarg($rootDir . '/build_geojson.php'),
+            escapeshellarg($vatmexDir)
+        ),
+    ],
+    [
         'label' => 'validate_geojson',
         'command' => sprintf(
             '%s %s',
