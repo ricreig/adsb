@@ -651,6 +651,13 @@ if (is_dir($geojsonDir)) {
 
     // PHP passes the list of available GeoJSON layers as JSON here.
     const geojsonLayers = <?php echo json_encode($layerFiles, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES); ?>;
+
+    function getGeojsonLayerUrl(id) {
+        if (!geojsonLayers || !geojsonLayers[id]) {
+            return null;
+        }
+        return buildUrl(geojsonLayers[id]);
+    }
     const errorOverlay = document.getElementById('errorOverlay');
     const diagnosticsContent = document.getElementById('diagnosticsContent');
     const diagnosticsClose = document.getElementById('diagnosticsClose');
@@ -739,6 +746,18 @@ if (is_dir($geojsonDir)) {
 
     function getDefaultSettings() {
         return JSON.parse(JSON.stringify(defaultSettings));
+    }
+
+    function normalizeSettingsPayload(input) {
+        const merged = { ...defaultSettings, ...(input || {}) };
+        const feedSource = input && input.feed_center ? input.feed_center : {};
+        merged.feed_center = { ...defaultSettings.feed_center, ...feedSource };
+        if (input && input.radius_nm && !feedSource.radius_nm) {
+            merged.feed_center.radius_nm = input.radius_nm;
+        }
+        const uiSource = input && input.ui_center ? input.ui_center : (input && input.display_center ? input.display_center : {});
+        merged.ui_center = { ...defaultSettings.ui_center, ...uiSource };
+        return merged;
     }
 
     let settings = window.settings || getDefaultSettings();
@@ -1136,7 +1155,12 @@ if (is_dir($geojsonDir)) {
             return Promise.resolve(navpointsGeojson);
         }
         navpointsGeojsonLoaded = true;
-        const url = buildUrl('assets/data/nav-points.geojson');
+        const url = getGeojsonLayerUrl('nav-points');
+        if (!url) {
+            navpointsGeojsonLoaded = false;
+            reportError('Navpoints layer missing', 'Layer "nav-points" is not available in geojson_dir.');
+            return Promise.resolve(null);
+        }
         return fetchGeoJson(url, `Navpoints layer (${url})`)
             .then(data => {
                 navpointsGeojson = data;
@@ -1153,7 +1177,10 @@ if (is_dir($geojsonDir)) {
         if (tmaLoaded) {
             return Promise.resolve();
         }
-        const url = buildUrl('assets/data/tma-tijuana.geojson');
+        const url = getGeojsonLayerUrl('tma');
+        if (!url) {
+            return Promise.resolve();
+        }
         return fetchGeoJson(url, `TMA layer (${url})`)
             .then(data => {
                 tmaLayer.clearLayers();
@@ -1169,7 +1196,10 @@ if (is_dir($geojsonDir)) {
         if (proceduresLoaded) {
             return Promise.resolve();
         }
-        const url = buildUrl('assets/data/procedures-tijuana.geojson');
+        const url = getGeojsonLayerUrl('procedures');
+        if (!url) {
+            return Promise.resolve();
+        }
         return fetchGeoJson(url, `Procedures layer (${url})`)
             .then(data => {
                 Object.values(procedureLayers).forEach(layer => layer.clearLayers());
@@ -1724,18 +1754,6 @@ if (is_dir($geojsonDir)) {
         );
     }
 
-    function normalizeSettingsPayload(input) {
-        const merged = { ...defaultSettings, ...(input || {}) };
-        const feedSource = input && input.feed_center ? input.feed_center : {};
-        merged.feed_center = { ...defaultSettings.feed_center, ...feedSource };
-        if (input && input.radius_nm && !feedSource.radius_nm) {
-            merged.feed_center.radius_nm = input.radius_nm;
-        }
-        const uiSource = input && input.ui_center ? input.ui_center : (input && input.display_center ? input.display_center : {});
-        merged.ui_center = { ...defaultSettings.ui_center, ...uiSource };
-        return merged;
-    }
-
     function normalizeLonLat(coord) {
         if (!Array.isArray(coord) || coord.length < 2) {
             return coord;
@@ -2070,6 +2088,24 @@ if (is_dir($geojsonDir)) {
         marker.setIcon(buildFlightIcon(color, opacity));
     }
 
+    function setTooltipOpacity(marker, opacity) {
+        if (!marker || typeof marker.getTooltip !== 'function') {
+            return;
+        }
+        const tooltip = marker.getTooltip();
+        if (!tooltip) {
+            return;
+        }
+        if (typeof tooltip.setOpacity === 'function') {
+            tooltip.setOpacity(opacity);
+        }
+        const el = tooltip.getElement ? tooltip.getElement() : null;
+        if (el) {
+            el.style.opacity = opacity;
+            el.style.display = opacity === 0 ? 'none' : '';
+        }
+    }
+
     function shouldShowLabel(ac) {
         if (!settings.labels.show_labels) {
             return false;
@@ -2228,7 +2264,7 @@ if (is_dir($geojsonDir)) {
             }
             updateMarkerIcon(existing.marker, color, status === 'released' ? 0.6 : 1);
             existing.vector.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
-            existing.marker.setTooltipOpacity(shouldShowLabel(ac) ? 1 : 0);
+            setTooltipOpacity(existing.marker, shouldShowLabel(ac) ? 1 : 0);
             const history = updateTrackHistory(existing, ac);
             if (existing.track) {
                 existing.track.setLatLngs(history.map(pt => [pt.lat, pt.lon]));
@@ -2266,7 +2302,7 @@ if (is_dir($geojsonDir)) {
                 className: 'track-label',
                 pane: 'labels',
             });
-            marker.setTooltipOpacity(shouldShowLabel(ac) ? 1 : 0);
+            setTooltipOpacity(marker, shouldShowLabel(ac) ? 1 : 0);
             marker.on('click', () => {
                 handleBrlSelection(flights[id]);
                 selectFlight(id);
@@ -2314,7 +2350,7 @@ if (is_dir($geojsonDir)) {
             const ac = flights[id];
             if (!ac) return;
             const visible = shouldShowLabel(ac);
-            flightMarkers[id].marker.setTooltipOpacity(visible ? 1 : 0);
+            setTooltipOpacity(flightMarkers[id].marker, visible ? 1 : 0);
             updateTooltipClass(flightMarkers[id].marker, ac);
         });
     }
