@@ -577,8 +577,11 @@ if (is_dir($geojsonDir)) {
             <div class="settings-section">
                 <strong>AIRAC / VATMEX</strong>
                 <div style="margin-top:6px;">
-                    <button id="airacUpdateBtn" style="width:100%;display:none;">UPDATE AIRAC (PULL VATMEX + REBUILD GEOJSON)</button>
+                    <button id="airacUpdateBtn" style="width:100%;">UPDATE AIRAC (PULL VATMEX + REBUILD GEOJSON)</button>
                     <span id="airacSpinner" class="spinner" style="display:none;"></span>
+                </div>
+                <div id="airacHint" style="margin-top:6px;font-size:12px;color:#9fb3c8;">
+                    Configura <code>vatmex_dir</code> y habilita <code>airac_update_enabled</code> en <code>config.php</code> para activar el botón.
                 </div>
                 <div id="airacConsole" class="console-box" style="margin-top:6px;display:none;"></div>
             </div>
@@ -2985,6 +2988,7 @@ if (is_dir($geojsonDir)) {
     const airacUpdateBtn = document.getElementById('airacUpdateBtn');
     const airacSpinner = document.getElementById('airacSpinner');
     const airacConsole = document.getElementById('airacConsole');
+    const airacHint = document.getElementById('airacHint');
     const sidebarToggle = document.getElementById('sidebarToggle');
     function hideDiagnostics() {
         diagnosticsDismissed = true;
@@ -2995,6 +2999,16 @@ if (is_dir($geojsonDir)) {
         diagnosticsDismissed = false;
         renderDiagnostics();
         errorOverlay.style.display = 'block';
+    }
+
+    function updateAiracUi() {
+        const airacReady = airacUpdateEnabled && vatmexDirConfigured;
+        airacUpdateBtn.disabled = !airacReady;
+        if (airacHint) {
+            airacHint.textContent = airacReady
+                ? 'Listo para actualizar AIRAC desde VATMEX.'
+                : 'Configura vatmex_dir y habilita airac_update_enabled en config.php para activar el botón.';
+        }
     }
 
     diagnosticsClose.addEventListener('click', () => {
@@ -3050,7 +3064,7 @@ if (is_dir($geojsonDir)) {
         document.getElementById('navpointsMinZoom').value = settings.navpoints.min_zoom;
         document.getElementById('navpointsZone').value = settings.navpoints.zone;
         document.getElementById('navpointsMax').value = settings.navpoints.max_points;
-        airacUpdateBtn.style.display = (airacUpdateEnabled && vatmexDirConfigured) ? 'inline-block' : 'none';
+        updateAiracUi();
     });
     // Apply settings on button click
     document.getElementById('applySettings').addEventListener('click', () => {
@@ -3098,6 +3112,7 @@ if (is_dir($geojsonDir)) {
                     window.settings = settings;
                     safeStoreSettings();
                     applySettings();
+                    updateAiracUi();
                     startPolling();
                     settingsPanel.style.display = 'none';
                     settingsToggle.textContent = 'Open Settings';
@@ -3121,6 +3136,7 @@ if (is_dir($geojsonDir)) {
                 window.settings = settings;
                 safeStoreSettings();
                 applySettings();
+                updateAiracUi();
                 loadStates();
                 loadStrips();
                 startPolling();
@@ -3129,6 +3145,7 @@ if (is_dir($geojsonDir)) {
                 ensureCenters();
                 applySettings();
                 vatmexDirConfigured = false;
+                updateAiracUi();
                 loadStates();
                 loadStrips();
                 startPolling();
