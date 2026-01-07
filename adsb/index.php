@@ -61,11 +61,13 @@ if (is_dir($geojsonDir)) {
             font-family: sans-serif;
             background: #101820;
             color: #e0e0e0;
+            font-size: calc(var(--ui-font-size, 12) * 1px); /* // [MXAIR2026] */
         }
         /* custom variables for label styling */
         :root {
             --label-size: 12;
             --label-color: #00ff00;
+            --ui-font-size: 12; /* // [MXAIR2026] */
         }
         /* customise Leaflet tooltip (track label) */
         .leaflet-tooltip.track-label {
@@ -169,7 +171,7 @@ if (is_dir($geojsonDir)) {
         }
         #sidebarToggle {
             position: absolute;
-            top: 10px;
+            top: 50px;
             right: 330px;
             z-index: 1200;
             background: #1a2330;
@@ -181,6 +183,96 @@ if (is_dir($geojsonDir)) {
         }
         body.sidebar-collapsed #sidebarToggle {
             right: 10px;
+        }
+        /* // [MXAIR2026] UI control strip */
+        #topControls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 6px;
+            z-index: 1200;
+        }
+        .icon-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 6px;
+            border: 1px solid #3f5270;
+            background: #1a2330;
+            color: #e0e0e0;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+        .floating-panel {
+            position: absolute;
+            top: 54px;
+            left: 10px;
+            width: 320px;
+            max-height: calc(100vh - 80px);
+            background: #1b2b42;
+            border: 1px solid #3f5270;
+            border-radius: 8px;
+            z-index: 1200;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .floating-panel.active {
+            display: flex;
+        }
+        .floating-panel .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            background: #16263a;
+            font-weight: bold;
+        }
+        .floating-panel .panel-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 6px;
+            background: #1f2e44;
+        }
+        .floating-panel .panel-tabs button {
+            flex: 1;
+            border: 1px solid #3f5270;
+            background: #1a2330;
+            color: #e0e0e0;
+            padding: 6px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .floating-panel .panel-tabs button.active {
+            background: #2b3a50;
+            border-color: #22d3ee;
+        }
+        .floating-panel .panel-body {
+            overflow-y: auto;
+            padding: 8px;
+            font-size: 12px;
+        }
+        .panel-section {
+            display: none;
+        }
+        .panel-section.active {
+            display: block;
+        }
+        .panel-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .strip-detail-popup {
+            margin-top: 6px;
+            padding: 6px;
+            border: 1px solid #22d3ee;
+            background: #16263a;
+            font-size: 12px;
+            color: #cdd6f4;
         }
         #sidebar h2 {
             margin-top: 0;
@@ -244,7 +336,7 @@ if (is_dir($geojsonDir)) {
         }
         .strip.assumed {
             border-color: #00c1ff;
-            background: #1c4058;
+            background: #0b3a4f; /* // [MXAIR2026] */
         }
         .strip.pending {
             border-color: #facc15;
@@ -256,6 +348,10 @@ if (is_dir($geojsonDir)) {
         }
         .strip.selected {
             box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.7);
+        }
+        .strip .strip-call {
+            text-decoration: underline dotted;
+            cursor: pointer;
         }
         .strip .strip-header {
             font-weight: bold;
@@ -292,6 +388,12 @@ if (is_dir($geojsonDir)) {
             background: #4b5563;
             color: #d1d5db;
         }
+        #brlToggle,
+        #brlAirport,
+        #brlClear {
+            white-space: nowrap;
+            padding: 6px 8px;
+        }
         #notif {
             position: absolute;
             top: 10px;
@@ -306,7 +408,7 @@ if (is_dir($geojsonDir)) {
         #feedStatus {
             position: absolute;
             top: 10px;
-            right: 340px;
+            right: 10px;
             background: rgba(14, 21, 32, 0.9);
             color: #e0e0e0;
             padding: 4px 8px;
@@ -316,20 +418,20 @@ if (is_dir($geojsonDir)) {
         }
         #tileStatus {
             position: absolute;
-            top: 10px;
+            top: 50px;
             left: 10px;
-            background: #f39c12;
-            color: #1a1a1a;
-            padding: 6px 10px;
+            background: rgba(14, 21, 32, 0.9);
+            color: #e0e0e0;
+            padding: 4px 8px;
             border-radius: 4px;
             display: none;
-            font-size: 12px;
+            font-size: 11px;
             z-index: 1000;
         }
         #feedError {
             position: absolute;
             top: 36px;
-            right: 340px;
+            right: 10px;
             background: rgba(176, 58, 46, 0.95);
             color: #fff;
             padding: 6px 8px;
@@ -436,6 +538,189 @@ if (is_dir($geojsonDir)) {
 </head>
 <body>
     <div id="map"></div>
+    <div id="topControls"> <!-- // [MXAIR2026] -->
+        <button id="layersToggle" class="icon-btn" type="button" aria-label="Capas">🗺️</button> <!-- // [MXAIR2026] -->
+        <button id="settingsToggle" class="icon-btn" type="button" aria-label="Settings">⚙️</button> <!-- // [MXAIR2026] -->
+    </div>
+    <div id="controlPanel" class="floating-panel" aria-hidden="true"> <!-- // [MXAIR2026] -->
+        <div class="panel-header">
+            <span id="panelTitle">Panel</span>
+            <button id="panelClose" class="icon-btn" type="button" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="panel-tabs">
+            <button type="button" class="panel-tab" data-tab="general">General</button>
+            <button type="button" class="panel-tab" data-tab="layers">Capas</button>
+            <button type="button" class="panel-tab" data-tab="appearance">Apariencias</button>
+        </div>
+        <div class="panel-body">
+            <div class="panel-section" data-tab="general">
+                <h3 style="margin-top:0;font-size:14px;text-align:center;">Display Settings</h3>
+                <label style="display:block;margin-bottom:4px;">Primary Airport ICAO
+                    <input type="text" id="airportInput" value="<?php echo htmlspecialchars($config['airport']['icao']); ?>" style="width:80px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Feed Center Lat
+                    <input type="number" id="feedCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['feed_center']['lat'] ?? $config['airport']['lat']); ?>" style="width:90px;margin-left:4px;" disabled/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Feed Center Lon
+                    <input type="number" id="feedCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['feed_center']['lon'] ?? $config['airport']['lon']); ?>" style="width:90px;margin-left:4px;" disabled/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">UI Center Lat
+                    <input type="number" id="displayCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>" style="width:90px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">UI Center Lon
+                    <input type="number" id="displayCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>" style="width:90px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Radius (NM, max 250)
+                    <input type="number" id="radiusInput" min="1" max="250" value="<?php echo htmlspecialchars((string)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250)); ?>" style="width:80px;margin-left:4px;" disabled/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Polling Interval (ms)
+                    <input type="number" id="pollIntervalInput" min="500" max="5000" value="<?php echo (int)$config['poll_interval_ms']; ?>" style="width:80px;margin-left:4px;"/> <!-- // [MXAIR2026] -->
+                </label>
+                <label style="display:block;margin-bottom:4px;">Range Rings (NM, comma‑sep)
+                    <input type="text" id="ringDistances" value="50,100,150,200,250" style="width:120px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Ring Colour
+                    <input type="color" id="ringColour" value="#6666ff" style="margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Ring Weight
+                    <input type="number" id="ringWeight" min="0.5" max="10" step="0.5" value="1" style="width:60px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Ring Dash (CSS dash)
+                    <input type="text" id="ringDash" value="6 6" style="width:90px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">
+                    <input type="checkbox" id="showLabels" checked/>
+                    Show Track Labels
+                </label>
+                <label style="display:block;margin-bottom:4px;">Label Min Zoom
+                    <input type="number" id="labelMinZoom" min="3" max="14" value="7" style="width:60px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">
+                    <input type="checkbox" id="showAltitude" checked/>
+                    Show Altitude
+                </label>
+                <label style="display:block;margin-bottom:4px;">
+                    <input type="checkbox" id="showSpeed" checked/>
+                    Show Ground Speed
+                </label>
+                <label style="display:block;margin-bottom:4px;">
+                    <input type="checkbox" id="showVerticalSpeed" checked/>
+                    Show Vertical Speed
+                </label>
+                <label style="display:block;margin-bottom:4px;">
+                    <input type="checkbox" id="showTrack" checked/>
+                    Show Track
+                </label>
+                <label style="display:block;margin-bottom:4px;">
+                    <input type="checkbox" id="showSquawk" checked/>
+                    Show Squawk
+                </label>
+                <div class="settings-section">
+                    <strong>Navpoints</strong>
+                    <label style="display:block;margin-bottom:4px;">
+                        <input type="checkbox" id="navpointsEnabled" checked/>
+                        Show Navpoints
+                    </label>
+                    <label style="display:block;margin-bottom:4px;">Navpoints Min Zoom
+                        <input type="number" id="navpointsMinZoom" min="3" max="14" value="7" style="width:60px;margin-left:4px;"/>
+                    </label>
+                    <label style="display:block;margin-bottom:4px;">Navpoints Zone
+                        <select id="navpointsZone" style="margin-left:4px;">
+                            <option value="all">Todo México</option>
+                            <option value="nw">NW México</option>
+                            <option value="ne">NE México</option>
+                            <option value="central">Centro</option>
+                            <option value="west">Occidente</option>
+                            <option value="south">Sur</option>
+                            <option value="se">Sureste</option>
+                            <option value="mmtj-120">Entorno MMTJ (120 NM)</option>
+                        </select>
+                    </label>
+                    <label style="display:block;margin-bottom:4px;">Max Navpoints
+                        <input type="number" id="navpointsMax" min="250" max="5000" value="2000" style="width:70px;margin-left:4px;"/>
+                    </label>
+                </div>
+                <div class="settings-section">
+                    <strong>Tracks &amp; Leading Line</strong>
+                    <label style="display:block;margin-bottom:4px;">
+                        <input type="checkbox" id="showTrail"/>
+                        Show Track Trail
+                    </label>
+                    <label style="display:block;margin-bottom:4px;">Leading Line Mode
+                        <select id="leaderMode" style="margin-left:4px;">
+                            <option value="time">Time (minutes)</option>
+                            <option value="distance">Distance (NM)</option>
+                        </select>
+                    </label>
+                    <label style="display:block;margin-bottom:4px;" id="leaderTimeLabel">Leading Time
+                        <select id="leaderTime" style="margin-left:4px;">
+                            <option value="1">1 min</option>
+                            <option value="2">2 min</option>
+                            <option value="3">3 min</option>
+                            <option value="4">4 min</option>
+                            <option value="5">5 min</option>
+                        </select>
+                    </label>
+                    <label style="display:block;margin-bottom:4px;" id="leaderDistanceLabel">Leading Distance
+                        <select id="leaderDistance" style="margin-left:4px;">
+                            <option value="1">1 NM</option>
+                            <option value="2">2 NM</option>
+                            <option value="5">5 NM</option>
+                            <option value="10">10 NM</option>
+                            <option value="20">20 NM</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="settings-section">
+                    <strong>AIRAC / VATMEX</strong>
+                    <div style="margin-top:6px;">
+                        <button id="airacUpdateBtn" style="width:100%;">UPDATE AIRAC (PULL VATMEX + REBUILD GEOJSON)</button>
+                        <span id="airacSpinner" class="spinner" style="display:none;"></span>
+                    </div>
+                    <div id="airacHint" style="margin-top:6px;font-size:12px;color:#9fb3c8;">
+                        Configura <code>vatmex_repo_dir</code> (o <code>vatmex_dir</code>) y habilita <code>airac_update_enabled</code> en <code>config.php</code> para activar el botón.
+                    </div>
+                    <div id="airacConsole" class="console-box" style="margin-top:6px;display:none;"></div>
+                </div>
+                <button id="applySettings" style="width:100%;margin-top:10px;">Apply Settings</button>
+            </div>
+            <div class="panel-section" data-tab="layers">
+                <div class="panel-actions">
+                    <button id="layersShowAll" type="button">Mostrar todo</button>
+                    <button id="layersHideAll" type="button">Ocultar todo</button>
+                </div>
+                <div class="layer-control" style="margin-top:8px;">
+                    <strong>Opciones globales</strong>
+                    <label><input type="checkbox" id="airwaysUpperToggle"/> Aerovías superiores</label>
+                    <label><input type="checkbox" id="airwaysLowerToggle"/> Aerovías inferiores</label>
+                    <label><input type="checkbox" id="firLimitsToggle"/> Límites FIR</label>
+                </div>
+                <div class="layer-control" style="margin-top:8px;">
+                    <strong>Filtrar por estaciones</strong>
+                    <input type="text" id="stationFilterInput" placeholder="MMMX, MMTJ, ..." style="width:100%;margin-top:4px;"/>
+                    <small style="display:block;margin-top:4px;color:#9fb3c8;">Activará SID/STAR/CTR/ATZ/TMA según las estaciones.</small>
+                </div>
+                <div id="layerControls" style="margin-top:10px;"></div>
+            </div>
+            <div class="panel-section" data-tab="appearance">
+                <label style="display:block;margin-bottom:4px;">Basemap Style
+                    <select id="basemapSelect" style="margin-left:4px;">
+                        <option value="dark">Dark (Radar)</option>
+                        <option value="light">Light</option>
+                    </select>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Label Font Size
+                    <input type="number" id="labelFontSize" min="8" max="24" value="12" style="width:50px;margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">Label Colour
+                    <input type="color" id="labelColour" value="#00ff00" style="margin-left:4px;"/>
+                </label>
+                <label style="display:block;margin-bottom:4px;">UI Text Size
+                    <input type="number" id="uiFontSize" min="10" max="18" value="12" style="width:60px;margin-left:4px;"/>
+                </label>
+            </div>
+        </div>
+    </div>
     <button id="sidebarToggle" aria-label="Toggle sidebar">☰ Panel</button>
     <div id="tileStatus">Basemap fallback activated.</div>
     <div id="feedStatus">Feed: -- · Última actualización: --</div>
@@ -448,8 +733,6 @@ if (is_dir($geojsonDir)) {
         <pre id="diagnosticsContent"></pre>
     </div>
     <div id="sidebar">
-        <h2>Airspace Layers</h2>
-        <div id="layerControls"></div>
         <h2>Tools</h2>
         <div style="display:flex;gap:6px;margin-bottom:10px;">
             <button id="brlToggle" style="flex:1;">BRL</button>
@@ -458,165 +741,12 @@ if (is_dir($geojsonDir)) {
         </div>
         <h2>Flight Strips</h2>
         <div id="stripTray"></div>
-        <div id="stripDetails">Selecciona una tira para ver detalles.</div>
         <h2>Selected Flight</h2>
         <div id="flightInfo">Click a flight to see details.</div>
         <div id="flightPlanPanel">
             <h3>Flight Plan</h3>
             <div id="flightPlanSummary">Selecciona un vuelo para ver el plan.</div>
             <button id="routeToggleBtn" type="button" disabled>Route OFF</button>
-        </div>
-
-        <h2>Settings</h2>
-        <button id="settingsToggle" style="width:100%;margin-bottom:10px;">Open Settings</button>
-        <div id="settingsPanel" style="display:none;padding:6px;border:1px solid #3f5270;background:#243752;font-size:13px;">
-            <h3 style="margin-top:0;font-size:14px;text-align:center;">Display Settings</h3>
-            <label style="display:block;margin-bottom:4px;">Primary Airport ICAO
-                <input type="text" id="airportInput" value="<?php echo htmlspecialchars($config['airport']['icao']); ?>" style="width:80px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Feed Center Lat
-                <input type="number" id="feedCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['feed_center']['lat'] ?? $config['airport']['lat']); ?>" style="width:90px;margin-left:4px;" disabled/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Feed Center Lon
-                <input type="number" id="feedCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['feed_center']['lon'] ?? $config['airport']['lon']); ?>" style="width:90px;margin-left:4px;" disabled/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">UI Center Lat
-                <input type="number" id="displayCenterLatInput" step="0.0001" value="<?php echo htmlspecialchars($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>" style="width:90px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">UI Center Lon
-                <input type="number" id="displayCenterLonInput" step="0.0001" value="<?php echo htmlspecialchars($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>" style="width:90px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Radius (NM, max 250)
-                <input type="number" id="radiusInput" min="1" max="250" value="<?php echo htmlspecialchars((string)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250)); ?>" style="width:80px;margin-left:4px;" disabled/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Polling Interval (ms)
-                <input type="number" id="pollIntervalInput" min="500" max="5000" value="1500" style="width:80px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Range Rings (NM, comma‑sep)
-                <input type="text" id="ringDistances" value="50,100,150,200,250" style="width:120px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Ring Colour
-                <input type="color" id="ringColour" value="#6666ff" style="margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Ring Weight
-                <input type="number" id="ringWeight" min="0.5" max="10" step="0.5" value="1" style="width:60px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Ring Dash (CSS dash)
-                <input type="text" id="ringDash" value="6 6" style="width:90px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Label Font Size
-                <input type="number" id="labelFontSize" min="8" max="24" value="12" style="width:50px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Label Colour
-                <input type="color" id="labelColour" value="#00ff00" style="margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">
-                <input type="checkbox" id="showLabels" checked/>
-                Show Track Labels
-            </label>
-            <label style="display:block;margin-bottom:4px;">Label Min Zoom
-                <input type="number" id="labelMinZoom" min="3" max="14" value="7" style="width:60px;margin-left:4px;"/>
-            </label>
-            <label style="display:block;margin-bottom:4px;">Basemap Style
-                <select id="basemapSelect" style="margin-left:4px;">
-                    <option value="dark">Dark (Radar)</option>
-                    <option value="light">Light</option>
-                </select>
-            </label>
-            <label style="display:block;margin-bottom:4px;">
-                <input type="checkbox" id="showAltitude" checked/>
-                Show Altitude
-            </label>
-            <label style="display:block;margin-bottom:4px;">
-                <input type="checkbox" id="showSpeed" checked/>
-                Show Ground Speed
-            </label>
-            <label style="display:block;margin-bottom:4px;">
-                <input type="checkbox" id="showVerticalSpeed" checked/>
-                Show Vertical Speed
-            </label>
-            <label style="display:block;margin-bottom:4px;">
-                <input type="checkbox" id="showTrack" checked/>
-                Show Track
-            </label>
-            <label style="display:block;margin-bottom:4px;">
-                <input type="checkbox" id="showSquawk" checked/>
-                Show Squawk
-            </label>
-            <div class="settings-section">
-                <strong>Navpoints</strong>
-                <label style="display:block;margin-bottom:4px;">
-                    <input type="checkbox" id="navpointsEnabled" checked/>
-                    Show Navpoints
-                </label>
-                <label style="display:block;margin-bottom:4px;">Navpoints Min Zoom
-                    <input type="number" id="navpointsMinZoom" min="3" max="14" value="7" style="width:60px;margin-left:4px;"/>
-                </label>
-                <label style="display:block;margin-bottom:4px;">Navpoints Zone
-                    <select id="navpointsZone" style="margin-left:4px;">
-                        <option value="all">Todo México</option>
-                        <option value="nw">NW México</option>
-                        <option value="ne">NE México</option>
-                        <option value="central">Centro</option>
-                        <option value="west">Occidente</option>
-                        <option value="south">Sur</option>
-                        <option value="se">Sureste</option>
-                        <option value="mmtj-120">Entorno MMTJ (120 NM)</option>
-                    </select>
-                </label>
-                <label style="display:block;margin-bottom:4px;">Max Navpoints
-                    <input type="number" id="navpointsMax" min="250" max="5000" value="2000" style="width:70px;margin-left:4px;"/>
-                </label>
-            </div>
-            <div class="settings-section">
-                <strong>Tracks &amp; Leading Line</strong>
-                <label style="display:block;margin-bottom:4px;">
-                    <input type="checkbox" id="showTrail"/>
-                    Show Track Trail
-                </label>
-                <label style="display:block;margin-bottom:4px;">Leading Line Mode
-                    <select id="leaderMode" style="margin-left:4px;">
-                        <option value="time">Time (minutes)</option>
-                        <option value="distance">Distance (NM)</option>
-                    </select>
-                </label>
-                <label style="display:block;margin-bottom:4px;" id="leaderTimeLabel">Leading Time
-                    <select id="leaderTime" style="margin-left:4px;">
-                        <option value="1">1 min</option>
-                        <option value="2">2 min</option>
-                        <option value="3">3 min</option>
-                        <option value="4">4 min</option>
-                        <option value="5">5 min</option>
-                    </select>
-                </label>
-                <label style="display:block;margin-bottom:4px;" id="leaderDistanceLabel">Leading Distance
-                    <select id="leaderDistance" style="margin-left:4px;">
-                        <option value="1">1 NM</option>
-                        <option value="2">2 NM</option>
-                        <option value="5">5 NM</option>
-                        <option value="10">10 NM</option>
-                        <option value="20">20 NM</option>
-                    </select>
-                </label>
-            </div>
-            <div class="settings-section">
-                <strong>Category Styles (future)</strong>
-                <div style="font-size:12px;color:#9fb3c8;margin-top:4px;">
-                    Placeholder for per-layer styling defaults (loaded/saved with settings).
-                </div>
-            </div>
-            <div class="settings-section">
-                <strong>AIRAC / VATMEX</strong>
-                <div style="margin-top:6px;">
-                    <button id="airacUpdateBtn" style="width:100%;">UPDATE AIRAC (PULL VATMEX + REBUILD GEOJSON)</button>
-                    <span id="airacSpinner" class="spinner" style="display:none;"></span>
-                </div>
-                <div id="airacHint" style="margin-top:6px;font-size:12px;color:#9fb3c8;">
-                    Configura <code>vatmex_repo_dir</code> (o <code>vatmex_dir</code>) y habilita <code>airac_update_enabled</code> en <code>config.php</code> para activar el botón.
-                </div>
-                <div id="airacConsole" class="console-box" style="margin-top:6px;display:none;"></div>
-            </div>
-            <button id="applySettings" style="width:100%;margin-top:10px;">Apply Settings</button>
         </div>
     </div>
     <div id="notif"></div>
@@ -749,6 +879,7 @@ if (is_dir($geojsonDir)) {
         },
         display: {
             basemap: 'dark',
+            ui_font_size: 12, // [MXAIR2026]
         },
         navpoints: {
             enabled: true,
@@ -1028,13 +1159,14 @@ if (is_dir($geojsonDir)) {
     function initLeafletApp() {
     // Create the map
     const map = L.map('map', {
-        zoomControl: true,
+        zoomControl: false, // [MXAIR2026]
         attributionControl: true,
         preferCanvas: true,
     }).setView([
         <?php echo (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>,
         <?php echo (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>
     ], 8);
+    L.control.zoom({ position: 'bottomleft' }).addTo(map); // [MXAIR2026]
     const tileStatus = document.getElementById('tileStatus');
     map.createPane('tracks');
     map.createPane('targets');
@@ -1115,31 +1247,18 @@ if (is_dir($geojsonDir)) {
     }
     switchBasemap('dark');
 
-    // Container for GeoJSON overlay layers
-    const overlays = {};
-    const bboxLayers = new Set([
-        'airways',
-        'procedures',
-        'mva',
-        'vfr',
-        'sectors',
-        'restricted-areas',
-        'fir-limits',
-        'nav-points',
-        'navaids',
-        'fixes',
-    ]);
-
-    // Colours per layer (defaults).  Operators can change via colour inputs.
-    const layerColours = {};
-
-    // Navpoints layer
-    const navpointsLayer = L.layerGroup();
-    let navpointsRequest = null;
+    // [MXAIR2026] GeoJSON overlay layers (fixed list)
+    const layerControlsDiv = document.getElementById('layerControls');
+    const layerStateKey = 'adsb_layer_states';
+    const layerToggles = {};
+    const layerDataCache = {};
     let navpointsLastWarning = 0;
     let navpointsGeojson = null;
     let navpointsGeojsonLoaded = false;
     const navpointColour = '#ffd166';
+    const stationFilterInput = document.getElementById('stationFilterInput');
+    let stationFilterList = [];
+
     function buildNavpointIcon() {
         return L.divIcon({
             className: 'navpoint-icon',
@@ -1149,46 +1268,92 @@ if (is_dir($geojsonDir)) {
         });
     }
 
-    const tmaLayer = L.geoJSON(null, {
-        style: {
-            color: '#5ec8ff',
-            weight: 2,
-            fill: false,
-        },
-    });
-    const procedureLayers = {
-        sid: L.geoJSON(null, { style: { color: '#ff9f1c', weight: 2, dashArray: '6 6' } }),
-        star: L.geoJSON(null, { style: { color: '#2ec4b6', weight: 2, dashArray: '2 6' } }),
-        app: L.geoJSON(null, { style: { color: '#e71d36', weight: 2, dashArray: '1 0' } }),
-    };
-    let tmaLoaded = false;
-    let proceduresLoaded = false;
+    const navpointsLayer = L.layerGroup(); // [MXAIR2026]
 
-    function addLayerToggle(labelText, layer, options = {}) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'layer-control';
-        const label = document.createElement('label');
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = !!options.checked;
-        checkbox.addEventListener('change', () => {
-            if (checkbox.checked) {
-                layer.addTo(map);
-                if (typeof options.onEnable === 'function') {
-                    options.onEnable();
-                }
-            } else {
-                map.removeLayer(layer);
-                if (typeof options.onDisable === 'function') {
-                    options.onDisable();
-                }
+    const layerDefinitions = {
+        fir: { id: 'fir-limits', label: 'FIR', file: 'data/fir-limits.geojson', layer: L.geoJSON(null, { style: { color: '#00b4d8', weight: 2, fill: false } }) },
+        border: { id: 'mex-border', label: 'Frontera', file: 'data/mex-border.geojson', layer: L.geoJSON(null, { style: { color: '#f4d35e', weight: 2, fill: false, dashArray: '6 4' } }) },
+        ctr: { id: 'ctr', label: 'CTR', file: 'data/ctr.geojson', layer: L.geoJSON(null, { style: { color: '#06d6a0', weight: 2, fillOpacity: 0.08 } }) },
+        tma: { id: 'tma', label: 'TMA', file: 'data/tma.geojson', layer: L.geoJSON(null, { style: { color: '#5ec8ff', weight: 2, fillOpacity: 0.08 } }) },
+        atz: { id: 'atz', label: 'ATZ', file: 'data/atz.geojson', layer: L.geoJSON(null, { style: { color: '#ffd166', weight: 2, fillOpacity: 0.08 } }) },
+        restricted: { id: 'restricted-areas', label: 'Áreas restringidas', file: 'data/restricted-areas.geojson', layer: L.geoJSON(null, { style: { color: '#ef476f', weight: 2, fillOpacity: 0.12 } }) },
+        navpoints: { id: 'nav-points', label: 'Navpoints', layer: navpointsLayer },
+        sid: { id: 'sid', label: 'SID', file: 'data/sid.geojson', layer: L.geoJSON(null, { style: { color: '#ff9f1c', weight: 2, dashArray: '6 6' } }) },
+        star: { id: 'star', label: 'STAR', file: 'data/star.geojson', layer: L.geoJSON(null, { style: { color: '#2ec4b6', weight: 2, dashArray: '2 6' } }) },
+        app: { id: 'app', label: 'APP', file: 'data/app.geojson', layer: L.geoJSON(null, { style: { color: '#e71d36', weight: 2 } }) },
+        airwaysUpper: { id: 'airways-upper', label: 'Aerovías superiores', file: 'data/airways-upper.geojson', layer: L.geoJSON(null, { style: { color: '#9b5de5', weight: 1.5, dashArray: '4 4' } }) },
+        airwaysLower: { id: 'airways-lower', label: 'Aerovías inferiores', file: 'data/airways-lower.geojson', layer: L.geoJSON(null, { style: { color: '#00bbf9', weight: 1.5, dashArray: '2 4' } }) },
+    };
+
+    const stationFilteredLayers = new Set(['ctr', 'tma', 'atz', 'sid', 'star', 'app']);
+
+    function loadLayerState() {
+        const defaults = {
+            fir: false,
+            border: false,
+            ctr: false,
+            tma: false,
+            atz: false,
+            restricted: false,
+            navpoints: settings.navpoints.enabled,
+            sid: false,
+            star: false,
+            app: false,
+            airwaysUpper: false,
+            airwaysLower: false,
+        };
+        try {
+            const raw = localStorage.getItem(layerStateKey);
+            if (!raw) {
+                return defaults;
             }
-        });
-        label.appendChild(checkbox);
-        label.appendChild(document.createTextNode(` ${labelText}`));
-        wrapper.appendChild(label);
-        layerControlsDiv.appendChild(wrapper);
-        return checkbox;
+            const parsed = JSON.parse(raw);
+            return { ...defaults, ...(parsed || {}) };
+        } catch (err) {
+            return defaults;
+        }
+    }
+
+    let layerState = loadLayerState();
+
+    function saveLayerState() {
+        try {
+            localStorage.setItem(layerStateKey, JSON.stringify(layerState));
+        } catch (err) {
+            console.warn('Failed to store layer state', err);
+        }
+    }
+
+    function matchesStation(feature) {
+        if (!stationFilterList.length) {
+            return true;
+        }
+        const props = feature.properties || {};
+        const name = String(props.name || props.ident || props.icao || '').toUpperCase();
+        return stationFilterList.some(code => name.includes(code));
+    }
+
+    function loadStaticLayerData(key) {
+        const def = layerDefinitions[key];
+        if (!def || !def.file) {
+            return Promise.resolve(null);
+        }
+        if (layerDataCache[key]) {
+            return Promise.resolve(layerDataCache[key]);
+        }
+        const url = buildUrl(def.file);
+        return fetchGeoJson(url, `GeoJSON layer ${key} (${url})`)
+            .then(data => {
+                const normalized = normalizeGeojson(data, {
+                    forcePolygon: ['ctr', 'tma', 'atz', 'restricted'].includes(key),
+                });
+                layerDataCache[key] = normalized;
+                return normalized;
+            })
+            .catch(err => {
+                reportError(`Failed to load ${key} layer`, formatFetchErrorDetail(err, def.file));
+                return null;
+            });
     }
 
     function loadNavpointsGeojson() {
@@ -1196,12 +1361,7 @@ if (is_dir($geojsonDir)) {
             return Promise.resolve(navpointsGeojson);
         }
         navpointsGeojsonLoaded = true;
-        const url = getGeojsonLayerUrl('nav-points');
-        if (!url) {
-            navpointsGeojsonLoaded = false;
-            reportError('Navpoints layer missing', 'Layer "nav-points" is not available in geojson_dir.');
-            return Promise.resolve(null);
-        }
+        const url = buildUrl('data/nav-points.geojson');
         return fetchGeoJson(url, `Navpoints layer (${url})`)
             .then(data => {
                 navpointsGeojson = data;
@@ -1214,217 +1374,143 @@ if (is_dir($geojsonDir)) {
             });
     }
 
-    function loadTmaLayer() {
-        if (tmaLoaded) {
-            return Promise.resolve();
+    function refreshLayerData(key) {
+        const def = layerDefinitions[key];
+        if (!def || !def.layer || !layerDataCache[key]) {
+            return;
         }
-        const url = getGeojsonLayerUrl('tma');
-        if (!url) {
-            return Promise.resolve();
+        if (stationFilteredLayers.has(key)) {
+            def.layer.options.filter = matchesStation;
         }
-        return fetchGeoJson(url, `TMA layer (${url})`)
-            .then(data => {
-                tmaLayer.clearLayers();
-                tmaLayer.addData(normalizeGeojson(data, { forcePolygon: true }));
-                tmaLoaded = true;
-            })
-            .catch(err => {
-                reportError('Failed to load TMA layer', formatFetchErrorDetail(err, url));
-            });
+        def.layer.clearLayers();
+        def.layer.addData(layerDataCache[key]);
+        def.layer.eachLayer(layerEl => {
+            if (layerEl.feature && layerEl.feature.properties && layerEl.feature.properties.name) {
+                layerEl.bindTooltip(layerEl.feature.properties.name, { permanent: false });
+            }
+        });
     }
 
-    function loadProcedureLayers() {
-        if (proceduresLoaded) {
-            return Promise.resolve();
+    function setLayerEnabled(key, enabled) {
+        const def = layerDefinitions[key];
+        if (!def || !def.layer) {
+            return;
         }
-        const url = getGeojsonLayerUrl('procedures');
-        if (!url) {
-            return Promise.resolve();
-        }
-        return fetchGeoJson(url, `Procedures layer (${url})`)
-            .then(data => {
-                Object.values(procedureLayers).forEach(layer => layer.clearLayers());
-                const features = (data && data.features) ? data.features : [];
-                features.forEach(feature => {
-                    const kind = (feature.properties && feature.properties.kind ? feature.properties.kind : 'other').toLowerCase();
-                    if (kind === 'sid') {
-                        procedureLayers.sid.addData(feature);
-                    } else if (kind === 'star') {
-                        procedureLayers.star.addData(feature);
-                    } else {
-                        procedureLayers.app.addData(feature);
-                    }
-                });
-                proceduresLoaded = true;
-            })
-            .catch(err => {
-                reportError('Failed to load procedures layer', formatFetchErrorDetail(err, url));
-            });
-    }
-
-    // Create layer controls in the sidebar
-    const layerControlsDiv = document.getElementById('layerControls');
-    const vatmexHeader = document.createElement('div');
-    vatmexHeader.className = 'layer-control';
-    vatmexHeader.innerHTML = '<strong>VATMEX Overlays</strong>';
-    layerControlsDiv.appendChild(vatmexHeader);
-
-    const navpointsToggle = addLayerToggle('NAV Points', navpointsLayer, {
-        checked: settings.navpoints.enabled,
-        onEnable: () => {
-            settings.navpoints.enabled = true;
+        layerState[key] = enabled;
+        saveLayerState();
+        if (key === 'navpoints') {
+            settings.navpoints.enabled = enabled;
             updateNavpoints();
-        },
-        onDisable: () => {
-            settings.navpoints.enabled = false;
-            navpointsLayer.clearLayers();
-        },
-    });
-    addLayerToggle('TMA', tmaLayer, {
-        onEnable: () => {
-            loadTmaLayer().then(() => {
-                if (!map.hasLayer(tmaLayer)) {
-                    tmaLayer.addTo(map);
+            return;
+        }
+        if (enabled) {
+            loadStaticLayerData(key).then(() => {
+                refreshLayerData(key);
+                if (!map.hasLayer(def.layer)) {
+                    def.layer.addTo(map);
                 }
             });
-        },
-    });
-    addLayerToggle('SID', procedureLayers.sid, {
-        onEnable: () => {
-            loadProcedureLayers().then(() => {
-                if (!map.hasLayer(procedureLayers.sid)) {
-                    procedureLayers.sid.addTo(map);
-                }
-            });
-        },
-    });
-    addLayerToggle('STAR', procedureLayers.star, {
-        onEnable: () => {
-            loadProcedureLayers().then(() => {
-                if (!map.hasLayer(procedureLayers.star)) {
-                    procedureLayers.star.addTo(map);
-                }
-            });
-        },
-    });
-    addLayerToggle('APP', procedureLayers.app, {
-        onEnable: () => {
-            loadProcedureLayers().then(() => {
-                if (!map.hasLayer(procedureLayers.app)) {
-                    procedureLayers.app.addTo(map);
-                }
-            });
-        },
-    });
-    Object.keys(geojsonLayers).forEach(id => {
-        // Default random colour for each layer
-        const defaultColour = '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
-        layerColours[id] = defaultColour;
+        } else if (map.hasLayer(def.layer)) {
+            map.removeLayer(def.layer);
+        }
+    }
+
+    function addLayerToggle(key, labelText, defaultEnabled = false) {
         const wrapper = document.createElement('div');
         wrapper.className = 'layer-control';
         const label = document.createElement('label');
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.checked = false;
-        checkbox.dataset.layerId = id;
-        const span = document.createElement('span');
-        span.textContent = id.replace(/-/g, ' ');
-        const colourPicker = document.createElement('input');
-        colourPicker.type = 'color';
-        colourPicker.value = defaultColour;
-        colourPicker.dataset.layerId = id;
-        // Event: toggling layer visibility
-        checkbox.addEventListener('change', (e) => {
-            const lid = e.target.dataset.layerId;
-            if (e.target.checked) {
-                loadLayer(lid);
-            } else {
-                removeLayer(lid);
-            }
-        });
-        // Event: colour change
-        colourPicker.addEventListener('input', (e) => {
-            const lid = e.target.dataset.layerId;
-            layerColours[lid] = e.target.value;
-            if (overlays[lid]) {
-                overlays[lid].setStyle({ color: e.target.value, weight: 1.5 });
-            }
+        checkbox.checked = layerState[key] ?? defaultEnabled;
+        checkbox.addEventListener('change', () => {
+            setLayerEnabled(key, checkbox.checked);
         });
         label.appendChild(checkbox);
-        label.appendChild(span);
-        label.appendChild(colourPicker);
+        label.appendChild(document.createTextNode(` ${labelText}`));
         wrapper.appendChild(label);
         layerControlsDiv.appendChild(wrapper);
-    });
-
-    // Load a GeoJSON layer when checked
-    function buildLayerUrl(id) {
-        let url = buildUrl(geojsonLayers[id]);
-        if (bboxLayers.has(id)) {
-            const bounds = map.getBounds();
-            url += `&north=${encodeURIComponent(bounds.getNorth())}`;
-            url += `&south=${encodeURIComponent(bounds.getSouth())}`;
-            url += `&east=${encodeURIComponent(bounds.getEast())}`;
-            url += `&west=${encodeURIComponent(bounds.getWest())}`;
+        layerToggles[key] = checkbox;
+        if (checkbox.checked) {
+            setLayerEnabled(key, true);
         }
-        return url;
+        return checkbox;
     }
 
-    function loadLayer(id, forceReload = false) {
-        if (overlays[id] && !forceReload) {
-            map.addLayer(overlays[id]);
-            return;
-        }
-        if (overlays[id]) {
-            map.removeLayer(overlays[id]);
-            delete overlays[id];
-        }
-        const url = buildLayerUrl(id);
-        fetchGeoJson(url, `GeoJSON layer ${id} (${url})`)
-            .then(data => {
-                const normalized = normalizeGeojson(data, {
-                    forcePolygon: ['atz', 'ctr', 'tma', 'restricted-areas'].includes(id),
-                });
-                const layer = L.geoJSON(normalized, {
-                    style: feature => {
-                        return {
-                            color: layerColours[id],
-                            weight: 1.5,
-                            fill: true,
-                            fillOpacity: 0.15
-                        };
-                    },
-                    onEachFeature: (feature, layerEl) => {
-                        if (feature.properties && feature.properties.name) {
-                            layerEl.bindTooltip(feature.properties.name, { permanent: false });
-                        }
-                    }
-                });
-                overlays[id] = layer;
-                layer.addTo(map);
-            })
-            .catch(err => console.error('Error loading layer ' + id, err));
+    addLayerToggle('ctr', 'CTR');
+    addLayerToggle('tma', 'TMA');
+    addLayerToggle('atz', 'ATZ');
+    addLayerToggle('restricted', 'Áreas restringidas');
+    addLayerToggle('navpoints', 'Navpoints', settings.navpoints.enabled);
+    addLayerToggle('sid', 'SID');
+    addLayerToggle('star', 'STAR');
+    addLayerToggle('app', 'APP');
+    addLayerToggle('border', 'Frontera');
+
+    const airwaysUpperToggle = document.getElementById('airwaysUpperToggle');
+    const airwaysLowerToggle = document.getElementById('airwaysLowerToggle');
+    const firLimitsToggle = document.getElementById('firLimitsToggle');
+    if (airwaysUpperToggle) {
+        airwaysUpperToggle.checked = !!layerState.airwaysUpper;
+        airwaysUpperToggle.addEventListener('change', () => setLayerEnabled('airwaysUpper', airwaysUpperToggle.checked));
+    }
+    if (airwaysLowerToggle) {
+        airwaysLowerToggle.checked = !!layerState.airwaysLower;
+        airwaysLowerToggle.addEventListener('change', () => setLayerEnabled('airwaysLower', airwaysLowerToggle.checked));
+    }
+    if (firLimitsToggle) {
+        firLimitsToggle.checked = !!layerState.fir;
+        firLimitsToggle.addEventListener('change', () => setLayerEnabled('fir', firLimitsToggle.checked));
     }
 
-    let bboxReloadTimer = null;
-    function scheduleBboxLayerReload() {
-        if (bboxReloadTimer) {
-            clearTimeout(bboxReloadTimer);
-        }
-        bboxReloadTimer = setTimeout(() => {
-            Object.keys(overlays).forEach(id => {
-                if (bboxLayers.has(id) && map.hasLayer(overlays[id])) {
-                    loadLayer(id, true);
+    function applyStationFilterInput() {
+        const raw = (stationFilterInput && stationFilterInput.value ? stationFilterInput.value : '').toUpperCase();
+        stationFilterList = raw.split(',').map(item => item.trim()).filter(Boolean);
+        stationFilteredLayers.forEach(key => refreshLayerData(key));
+        if (stationFilterList.length) {
+            ['sid', 'star', 'ctr', 'atz', 'tma'].forEach(key => {
+                if (layerToggles[key] && !layerToggles[key].checked) {
+                    layerToggles[key].checked = true;
+                    setLayerEnabled(key, true);
                 }
             });
-        }, 600);
+        }
     }
 
-    // Remove a GeoJSON layer when unchecked
-    function removeLayer(id) {
-        if (overlays[id]) {
-            map.removeLayer(overlays[id]);
-        }
+    if (stationFilterInput) {
+        stationFilterInput.addEventListener('input', () => {
+            applyStationFilterInput();
+        });
+    }
+
+    const layersShowAll = document.getElementById('layersShowAll');
+    const layersHideAll = document.getElementById('layersHideAll');
+    if (layersShowAll) {
+        layersShowAll.addEventListener('click', () => {
+            Object.keys(layerDefinitions).forEach(key => {
+                const toggle = layerToggles[key];
+                if (toggle) {
+                    toggle.checked = true;
+                }
+                setLayerEnabled(key, true);
+            });
+            if (airwaysUpperToggle) airwaysUpperToggle.checked = true;
+            if (airwaysLowerToggle) airwaysLowerToggle.checked = true;
+            if (firLimitsToggle) firLimitsToggle.checked = true;
+        });
+    }
+    if (layersHideAll) {
+        layersHideAll.addEventListener('click', () => {
+            Object.keys(layerDefinitions).forEach(key => {
+                const toggle = layerToggles[key];
+                if (toggle) {
+                    toggle.checked = false;
+                }
+                setLayerEnabled(key, false);
+            });
+            if (airwaysUpperToggle) airwaysUpperToggle.checked = false;
+            if (airwaysLowerToggle) airwaysLowerToggle.checked = false;
+            if (firLimitsToggle) firLimitsToggle.checked = false;
+        });
     }
 
     function navpointsZoneBounds() {
@@ -1527,50 +1613,10 @@ if (is_dir($geojsonDir)) {
             return;
         }
 
-        loadNavpointsGeojson().then(data => {
+        loadNavpointsGeojson().then(data => { // [MXAIR2026]
             if (data) {
                 updateNavpoints();
-                return;
             }
-            const url = apiUrl('navpoints.php')
-                + `?north=${encodeURIComponent(bbox.north)}`
-                + `&south=${encodeURIComponent(bbox.south)}`
-                + `&east=${encodeURIComponent(bbox.east)}`
-                + `&west=${encodeURIComponent(bbox.west)}`
-                + `&limit=${encodeURIComponent(limit)}`;
-            if (navpointsRequest) {
-                navpointsRequest.abort();
-            }
-            navpointsRequest = new AbortController();
-            fetchJson(url, { signal: navpointsRequest.signal }, 'Navpoints request')
-                .then(data => {
-                    navpointsLayer.clearLayers();
-                    const normalized = normalizeGeojson(data);
-                    const icon = buildNavpointIcon();
-                    L.geoJSON(normalized, {
-                        pointToLayer: (feature, latlng) => {
-                            return L.marker(latlng, {
-                                icon,
-                                pane: 'overlayPane',
-                            });
-                        },
-                        onEachFeature: (feature, layerEl) => {
-                            const name = feature.properties && (feature.properties.id || feature.properties.name);
-                            if (name && settings.labels.show_labels && map.getZoom() >= settings.labels.min_zoom) {
-                                layerEl.bindTooltip(String(name), {
-                                    permanent: false,
-                                    direction: 'top',
-                                    offset: [0, -6],
-                                });
-                            }
-                        },
-                    }).addTo(navpointsLayer);
-                    if (data.meta && data.meta.truncated && Date.now() - navpointsLastWarning > 5000) {
-                        navpointsLastWarning = Date.now();
-                        showNotification('Límite de navpoints alcanzado; acércate para más detalle.');
-                    }
-                })
-                .catch(() => {});
         });
     }
 
@@ -1591,7 +1637,7 @@ if (is_dir($geojsonDir)) {
     let selectedFlight = null;
     const noteStore = loadNoteStore();
     const stripTray = document.getElementById('stripTray');
-    const stripDetails = document.getElementById('stripDetails');
+    const stripDetails = null; // [MXAIR2026]
     const flightInfoDiv = document.getElementById('flightInfo');
     const flightPlanSummary = document.getElementById('flightPlanSummary');
     const routeToggleBtn = document.getElementById('routeToggleBtn');
@@ -1661,13 +1707,14 @@ if (is_dir($geojsonDir)) {
         ensureCenters();
         document.documentElement.style.setProperty('--label-size', settings.labels.font_size);
         document.documentElement.style.setProperty('--label-color', settings.labels.color);
+        document.documentElement.style.setProperty('--ui-font-size', settings.display.ui_font_size || 12); // [MXAIR2026]
         map.setView([settings.ui_center.lat, settings.ui_center.lon], map.getZoom());
         updateRangeRings();
         switchBasemap(settings.display && settings.display.basemap ? settings.display.basemap : 'dark');
         updateLabelVisibility();
         updateNavpoints();
-        if (typeof navpointsToggle !== 'undefined') {
-            navpointsToggle.checked = settings.navpoints.enabled;
+        if (layerToggles.navpoints) { // [MXAIR2026]
+            layerToggles.navpoints.checked = settings.navpoints.enabled; // [MXAIR2026]
         }
         if (!settings.tracks.show_trail) {
             Object.values(flightMarkers).forEach((markerData) => {
@@ -1704,9 +1751,8 @@ if (is_dir($geojsonDir)) {
         updateLabelVisibility();
         scheduleNavpointsUpdate();
     });
-    map.on('moveend', () => {
-        scheduleNavpointsUpdate();
-        scheduleBboxLayerReload();
+    map.on('moveend', () => { // [MXAIR2026]
+        scheduleNavpointsUpdate(); // [MXAIR2026]
     });
 
     // Utility: compute destination point given distance (NM) and bearing from start
@@ -2056,24 +2102,52 @@ if (is_dir($geojsonDir)) {
         }
     }
 
+    function scrollStripIntoView(flightId) { // [MXAIR2026]
+        const stripEl = document.querySelector('.strip[data-flight-id=\"' + flightId + '\"]'); // [MXAIR2026]
+        if (stripEl) { // [MXAIR2026]
+            stripEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); // [MXAIR2026]
+        }
+    }
+
     function updateStripDetails(flightId) {
-        if (!flightId) {
-            stripDetails.textContent = 'Selecciona una tira para ver detalles.';
-            return;
+        const stripEl = document.querySelector('.strip[data-flight-id=\"' + flightId + '\"]'); // [MXAIR2026]
+        if (!flightId || !stripEl) { // [MXAIR2026]
+            return; // [MXAIR2026]
         }
         const ac = flights[flightId] || {};
         const status = getFlightStatus(flightId);
         const note = ac.note || stripNotes[flightId] || '';
         const callsign = ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || flightId);
+        const reg = ac.reg ? ac.reg.trim().toUpperCase() : ''; // [MXAIR2026]
+        const reg = ac.reg ? ac.reg.trim().toUpperCase() : ''; // [MXAIR2026]
         const alt = ac.alt ? `${ac.alt}FT` : '---';
         const gs = ac.gs ? `${ac.gs}KT` : '---';
         const trk = ac.track ? `${ac.track}°` : '---';
-        stripDetails.innerHTML = `
+        const type = ac.type || ac.aircraft_type || '---';
+        const route = ac.routeSummary || (ac.origin || ac.destination ? `${ac.origin || '---'} → ${ac.destination || '---'}` : 'Sin ruta disponible');
+        const popup = document.createElement('div'); // [MXAIR2026]
+        popup.className = 'strip-detail-popup'; // [MXAIR2026]
+        popup.dataset.flightId = flightId; // [MXAIR2026]
+        popup.innerHTML = `
             <strong>${escapeHtml(callsign)}</strong><br>
             Estado: ${escapeHtml(status.toUpperCase())}<br>
             ALT ${escapeHtml(alt)} · GS ${escapeHtml(gs)} · TRK ${escapeHtml(trk)}<br>
+            TYPE ${escapeHtml(type)} · RUTA ${escapeHtml(route)}<br>
+            Plan: <span class=\"strip-plan\">${escapeHtml(ac.routeSummary || 'Cargando...')}</span><br>
             Nota: ${escapeHtml(note || '---')}
         `;
+        const existing = stripEl.parentElement.querySelector('.strip-detail-popup'); // [MXAIR2026]
+        if (existing) {
+            existing.remove();
+        }
+        stripEl.after(popup);
+        loadFlightPlan(flightId).then(() => { // [MXAIR2026]
+            const summary = flights[flightId]?.routeSummary || 'Sin ruta disponible';
+            const target = popup.querySelector('.strip-plan');
+            if (target) {
+                target.textContent = summary;
+            }
+        });
     }
 
     function loadStates() {
@@ -2470,6 +2544,10 @@ if (is_dir($geojsonDir)) {
         if (stripEl && !stripOrder.includes(id)) {
             stripEl.remove();
         }
+        const popup = document.querySelector('.strip-detail-popup'); // [MXAIR2026]
+        if (popup && popup.dataset.flightId === id) { // [MXAIR2026]
+            popup.remove(); // [MXAIR2026]
+        }
         updateDebugInfo();
     }
 
@@ -2519,8 +2597,10 @@ if (is_dir($geojsonDir)) {
             <span>${note ? `NOTE ${note}` : 'NOTE ---'}</span>
         `;
         return `
-            <div class="strip-header">
-                <span>${callsign}</span>
+            <div class="strip-header"> <!-- // [MXAIR2026] -->
+                <span>
+                    <span class="strip-call" data-flight-id="${flightId}">${callsign}</span>${reg ? ` <span class="strip-call" data-flight-id="${flightId}">(${reg})</span>` : ''}
+                </span>
                 <span class="strip-status">${statusLabel}</span>
             </div>
             <div class="strip-meta">${detailsPrimary}</div>
@@ -2556,6 +2636,7 @@ if (is_dir($geojsonDir)) {
                     selectedStrip = flightId;
                     updateStripDetails(flightId);
                     selectFlight(flightId);
+                    scrollStripIntoView(flightId); // [MXAIR2026]
                 });
                 strip.addEventListener('dragstart', event => {
                     event.dataTransfer.setData('text/plain', flightId);
@@ -2586,6 +2667,18 @@ if (is_dir($geojsonDir)) {
             strip.classList.toggle('pending', status === 'normal');
             strip.classList.toggle('selected', selectedFlight === flightId || selectedStrip === flightId);
             strip.innerHTML = buildStripHtml(ac, status);
+            strip.querySelectorAll('.strip-call').forEach(el => { // [MXAIR2026]
+                if (el.dataset.bound) { // [MXAIR2026]
+                    return; // [MXAIR2026]
+                }
+                el.dataset.bound = '1'; // [MXAIR2026]
+                el.addEventListener('click', (event) => { // [MXAIR2026]
+                    event.stopPropagation(); // [MXAIR2026]
+                    selectedStrip = flightId; // [MXAIR2026]
+                    updateStripDetails(flightId); // [MXAIR2026]
+                    scrollStripIntoView(flightId); // [MXAIR2026]
+                }); // [MXAIR2026]
+            });
             if (['7500','7600','7700'].includes(ac.squawk)) {
                 strip.style.background = '#8a0e0e';
             } else {
@@ -2606,6 +2699,7 @@ if (is_dir($geojsonDir)) {
         selectedStrip = flightId;
         ensureStripForFlight(flightId);
         updateStripDetails(flightId);
+        scrollStripIntoView(flightId); // [MXAIR2026]
         routePlan = null;
         clearRoute();
         // Highlight marker
@@ -2617,6 +2711,7 @@ if (is_dir($geojsonDir)) {
             updateTooltipClass(m, flights[id] || {});
         });
         updateStrips();
+        scrollStripIntoView(flightId); // [MXAIR2026]
         // Show details
         // Build details HTML
         const status = getFlightStatus(flightId);
@@ -2672,6 +2767,7 @@ if (is_dir($geojsonDir)) {
     function assumeFlight(flightId) {
         flightStates[flightId] = 'assumed';
         stripStatuses[flightId] = 'assumed';
+        stripOrder = [flightId, ...stripOrder.filter(item => item !== flightId)]; // [MXAIR2026]
         const markerData = flightMarkers[flightId];
         if (markerData) {
             const color = flightColor('assumed');
@@ -2687,6 +2783,7 @@ if (is_dir($geojsonDir)) {
             strip.classList.remove('released');
         }
         updateStrips();
+        persistStripOrder(stripOrder); // [MXAIR2026]
         updateLabelVisibility();
         if (selectedFlight === flightId) {
             selectFlight(flightId);
@@ -2894,14 +2991,14 @@ if (is_dir($geojsonDir)) {
             brlLabel = L.marker(mid, {
                 icon: L.divIcon({
                     className: 'brl-label',
-                    html: `<div style="background:#0e1520;color:#facc15;padding:2px 6px;border:1px solid #facc15;border-radius:4px;font-size:11px;">${labelText}</div>`
+                    html: `<div style="background:#0e1520;color:#facc15;padding:2px 6px;border:1px solid #facc15;border-radius:4px;font-size:11px;white-space:nowrap;display:inline-block;">${labelText}</div>` // [MXAIR2026]
                 }),
             }).addTo(map);
         } else {
             brlLabel.setLatLng(mid);
             brlLabel.setIcon(L.divIcon({
                 className: 'brl-label',
-                html: `<div style="background:#0e1520;color:#facc15;padding:2px 6px;border:1px solid #facc15;border-radius:4px;font-size:11px;">${labelText}</div>`
+                html: `<div style="background:#0e1520;color:#facc15;padding:2px 6px;border:1px solid #facc15;border-radius:4px;font-size:11px;white-space:nowrap;display:inline-block;">${labelText}</div>` // [MXAIR2026]
             }));
         }
     }
@@ -3152,8 +3249,13 @@ if (is_dir($geojsonDir)) {
     }
 
     // Settings panel toggling
-    const settingsToggle = document.getElementById('settingsToggle');
-    const settingsPanel = document.getElementById('settingsPanel');
+    const layersToggle = document.getElementById('layersToggle'); // [MXAIR2026]
+    const settingsToggle = document.getElementById('settingsToggle'); // [MXAIR2026]
+    const controlPanel = document.getElementById('controlPanel'); // [MXAIR2026]
+    const panelTitle = document.getElementById('panelTitle'); // [MXAIR2026]
+    const panelClose = document.getElementById('panelClose'); // [MXAIR2026]
+    const panelTabs = Array.from(document.querySelectorAll('.panel-tab')); // [MXAIR2026]
+    const panelSections = Array.from(document.querySelectorAll('.panel-section')); // [MXAIR2026]
     const airacUpdateBtn = document.getElementById('airacUpdateBtn');
     const airacSpinner = document.getElementById('airacSpinner');
     const airacConsole = document.getElementById('airacConsole');
@@ -3204,10 +3306,7 @@ if (is_dir($geojsonDir)) {
         setSidebarCollapsed(!collapsed);
         map.invalidateSize();
     });
-    settingsToggle.addEventListener('click', () => {
-        settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
-        settingsToggle.textContent = settingsPanel.style.display === 'none' ? 'Open Settings' : 'Close Settings';
-        // populate inputs with current settings
+    function populateSettingsInputs() { // [MXAIR2026]
         document.getElementById('airportInput').value = settings.airport.icao;
         document.getElementById('feedCenterLatInput').value = settings.feed_center.lat;
         document.getElementById('feedCenterLonInput').value = settings.feed_center.lon;
@@ -3221,6 +3320,7 @@ if (is_dir($geojsonDir)) {
         document.getElementById('ringDash').value = settings.rings.style.dash;
         document.getElementById('labelFontSize').value = settings.labels.font_size;
         document.getElementById('labelColour').value = settings.labels.color;
+        document.getElementById('uiFontSize').value = settings.display.ui_font_size || 12; // [MXAIR2026]
         document.getElementById('showLabels').checked = settings.labels.show_labels;
         document.getElementById('labelMinZoom').value = settings.labels.min_zoom;
         document.getElementById('basemapSelect').value = settings.display.basemap || 'dark';
@@ -3239,7 +3339,38 @@ if (is_dir($geojsonDir)) {
         document.getElementById('leaderDistance').value = settings.leader.distance_nm || 2;
         syncLeaderControls(settings.leader && settings.leader.mode);
         updateAiracUi();
+    }
+
+    function setActivePanelTab(tabId) { // [MXAIR2026]
+        panelTabs.forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.tab === tabId);
+        });
+        panelSections.forEach(section => {
+            section.classList.toggle('active', section.dataset.tab === tabId);
+        });
+        if (panelTitle) {
+            panelTitle.textContent = tabId === 'layers' ? 'Capas' : (tabId === 'appearance' ? 'Apariencias' : 'General');
+        }
+    }
+
+    function openControlPanel(tabId) { // [MXAIR2026]
+        controlPanel.classList.add('active');
+        controlPanel.setAttribute('aria-hidden', 'false');
+        setActivePanelTab(tabId);
+        populateSettingsInputs();
+    }
+
+    function closeControlPanel() { // [MXAIR2026]
+        controlPanel.classList.remove('active');
+        controlPanel.setAttribute('aria-hidden', 'true');
+    }
+
+    panelTabs.forEach(tab => {
+        tab.addEventListener('click', () => openControlPanel(tab.dataset.tab));
     });
+    layersToggle.addEventListener('click', () => openControlPanel('layers')); // [MXAIR2026]
+    settingsToggle.addEventListener('click', () => openControlPanel('general')); // [MXAIR2026]
+    panelClose.addEventListener('click', closeControlPanel); // [MXAIR2026]
     // Apply settings on button click
     document.getElementById('applySettings').addEventListener('click', () => {
         settings.airport.icao = document.getElementById('airportInput').value.trim().toUpperCase();
@@ -3255,6 +3386,7 @@ if (is_dir($geojsonDir)) {
         settings.rings.style.dash = document.getElementById('ringDash').value;
         settings.labels.font_size = parseInt(document.getElementById('labelFontSize').value, 10) || settings.labels.font_size;
         settings.labels.color = document.getElementById('labelColour').value;
+        settings.display.ui_font_size = parseInt(document.getElementById('uiFontSize').value, 10) || settings.display.ui_font_size; // [MXAIR2026]
         settings.labels.show_labels = document.getElementById('showLabels').checked;
         settings.labels.min_zoom = parseInt(document.getElementById('labelMinZoom').value, 10) || settings.labels.min_zoom;
         settings.labels.show_alt = document.getElementById('showAltitude').checked;
@@ -3299,8 +3431,7 @@ if (is_dir($geojsonDir)) {
                     applySettings();
                     updateAiracUi();
                     startPolling();
-                    settingsPanel.style.display = 'none';
-                    settingsToggle.textContent = 'Open Settings';
+                    closeControlPanel(); // [MXAIR2026]
                     showNotification('Settings saved');
                 }
             })

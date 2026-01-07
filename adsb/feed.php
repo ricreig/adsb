@@ -25,10 +25,10 @@ const FEED_SCHEMA_VERSION = 2;
 function loadStoredSettings(array $config): array
 {
     $settings = [
-        'feed_center' => [
-            'lat' => (float)($config['feed_center']['lat'] ?? $config['airport']['lat']),
-            'lon' => (float)($config['feed_center']['lon'] ?? $config['airport']['lon']),
-            'radius_nm' => (float)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250),
+        'feed_center' => [ // [MXAIR2026]
+            'lat' => (float)($config['feed_center']['lat'] ?? $config['airport']['lat']), // [MXAIR2026]
+            'lon' => (float)($config['feed_center']['lon'] ?? $config['airport']['lon']), // [MXAIR2026]
+            'radius_nm' => (float)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250), // [MXAIR2026]
         ],
         'ui_center' => [
             'lat' => (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541),
@@ -76,15 +76,49 @@ function loadStoredSettings(array $config): array
     } catch (Throwable $e) {
         return $settings;
     }
-    return enforceFixedFeedCenter($settings, $config);
+    return enforceFixedFeedCenter($settings, $config); // [MXAIR2026]
 }
 
 function enforceFixedFeedCenter(array $settings, array $config): array
 {
-    $settings['feed_center']['lat'] = (float)($config['feed_center']['lat'] ?? $settings['feed_center']['lat']);
-    $settings['feed_center']['lon'] = (float)($config['feed_center']['lon'] ?? $settings['feed_center']['lon']);
-    $settings['feed_center']['radius_nm'] = (float)($config['feed_radius_nm'] ?? $settings['feed_center']['radius_nm']);
-    return $settings;
+    $settings['feed_center']['lat'] = (float)($config['feed_center']['lat'] ?? $settings['feed_center']['lat']); // [MXAIR2026]
+    $settings['feed_center']['lon'] = (float)($config['feed_center']['lon'] ?? $settings['feed_center']['lon']); // [MXAIR2026]
+    $settings['feed_center']['radius_nm'] = (float)($config['feed_radius_nm'] ?? $settings['feed_center']['radius_nm']); // [MXAIR2026]
+    return $settings; // [MXAIR2026]
+}
+
+function loadFeedCenters(array $config, array $storedSettings): array
+{
+    $centers = $config['feed_centers'] ?? null; // [MXAIR2026]
+    $normalized = [];
+    if (is_array($centers)) {
+        foreach ($centers as $center) {
+            if (!is_array($center)) {
+                continue;
+            }
+            $lat = filter_var($center['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+            $lon = filter_var($center['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+            $radius = filter_var($center['radius_nm'] ?? null, FILTER_VALIDATE_FLOAT);
+            if ($lat === false || $lon === false || $radius === false) {
+                continue;
+            }
+            $normalized[] = [
+                'name' => $center['name'] ?? null,
+                'lat' => (float)$lat,
+                'lon' => (float)$lon,
+                'radius_nm' => (float)$radius,
+            ];
+        }
+    }
+    if (!$normalized) {
+        $normalized[] = [
+            'name' => 'default',
+            'lat' => (float)$storedSettings['feed_center']['lat'],
+            'lon' => (float)$storedSettings['feed_center']['lon'],
+            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+        ];
+    }
+    return $normalized; // [MXAIR2026]
 }
 
 function nowMs(): int
@@ -436,16 +470,34 @@ function buildEntryId(array $ac, float $lat, float $lon): ?string
     return null;
 }
 
-$storedSettings = loadStoredSettings($config);
-$lat = (float)$storedSettings['feed_center']['lat'];
-$lon = (float)$storedSettings['feed_center']['lon'];
-$radius = (float)$storedSettings['feed_center']['radius_nm'];
+function closestFeedCenter(float $lat, float $lon, array $centers): ?array
+{ // [MXAIR2026]
+    $closest = null;
+    foreach ($centers as $center) {
+        $distance = haversineNm($lat, $lon, (float)$center['lat'], (float)$center['lon']);
+        if ($closest === null || $distance < $closest['distance_nm']) {
+            $closest = [
+                'distance_nm' => $distance,
+                'center' => $center,
+            ];
+        }
+    }
+    return $closest;
+}
 
-$cacheTtlMs = (int)($config['feed_cache_ttl_ms'] ?? 1500);
-$cacheMaxStaleMs = (int)($config['feed_cache_max_stale_ms'] ?? 5000);
+$storedSettings = loadStoredSettings($config);
+$feedCenters = loadFeedCenters($config, $storedSettings); // [MXAIR2026]
+$primaryCenter = $feedCenters[0] ?? [
+    'lat' => (float)$storedSettings['feed_center']['lat'],
+    'lon' => (float)$storedSettings['feed_center']['lon'],
+    'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+];
+
+$cacheTtlMs = (int)($config['feed_cache_ttl_ms'] ?? 1500); // [MXAIR2026]
+$cacheMaxStaleMs = (int)($config['feed_cache_max_stale_ms'] ?? 5000); // [MXAIR2026]
 $rateLimitS = (float)($config['feed_rate_limit_s'] ?? 1.0);
 
-$cacheKey = 'adsb_feed_' . md5(sprintf('%.4f|%.4f|%.1f', $lat, $lon, $radius));
+$cacheKey = 'adsb_feed_' . md5(json_encode($feedCenters, JSON_UNESCAPED_SLASHES)); // [MXAIR2026]
 $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
 
 $stalePayload = null;
@@ -463,10 +515,11 @@ if ($cached !== null) {
         'now' => date('c'),
         'total' => $cached['total'] ?? count($cached['ac'] ?? []),
         'ac' => $cached['ac'] ?? [],
+        'feed_centers' => $cached['feed_centers'] ?? $feedCenters, // [MXAIR2026]
         'feed_center' => $cached['feed_center'] ?? [
-            'lat' => (float)$storedSettings['feed_center']['lat'],
-            'lon' => (float)$storedSettings['feed_center']['lon'],
-            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+            'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+            'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+            'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
         ],
         'ui_center' => $cached['ui_center'] ?? [
             'lat' => (float)$storedSettings['ui_center']['lat'],
@@ -492,10 +545,11 @@ if (!$canRequestUpstream) {
             'now' => date('c'),
             'total' => $fallbackTotal,
             'ac' => $fallbackAc,
+            'feed_centers' => $stalePayload['feed_centers'] ?? $feedCenters, // [MXAIR2026]
             'feed_center' => $stalePayload['feed_center'] ?? [
-                'lat' => (float)$storedSettings['feed_center']['lat'],
-                'lon' => (float)$storedSettings['feed_center']['lon'],
-                'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+                'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+                'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+                'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
             ],
             'ui_center' => $stalePayload['ui_center'] ?? [
                 'lat' => (float)$storedSettings['ui_center']['lat'],
@@ -513,10 +567,11 @@ if (!$canRequestUpstream) {
         'now' => date('c'),
         'total' => 0,
         'ac' => [],
+        'feed_centers' => $feedCenters, // [MXAIR2026]
         'feed_center' => [
-            'lat' => (float)$storedSettings['feed_center']['lat'],
-            'lon' => (float)$storedSettings['feed_center']['lon'],
-            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+            'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+            'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+            'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
         ],
         'ui_center' => [
             'lat' => (float)$storedSettings['ui_center']['lat'],
@@ -525,22 +580,38 @@ if (!$canRequestUpstream) {
     ], 200);
 }
 
-$feedUrl = rtrim($config['adsb_feed_url'], '/') . '/' . $lat . '/' . $lon . '/' . $radius;
 $headers = [];
 if (!empty($config['adsb_api_key'])) {
     $headerName = $config['adsb_api_header'] ?: 'X-API-Key';
     $headers[] = $headerName . ': ' . $config['adsb_api_key'];
 }
 
+$mergedAircraft = [];
+$upstreamStatus = null;
 $upstreamError = null;
-[$response, $upstreamStatus, $upstreamError] = fetchUpstream($feedUrl, $headers, 5);
-
-if ($response === false || ($upstreamStatus !== null && $upstreamStatus >= 400)) {
-    $errorMessage = $upstreamError;
-    if ($errorMessage === null && $upstreamStatus !== null) {
-        $errorMessage = 'Upstream HTTP ' . $upstreamStatus;
+$successCount = 0;
+foreach ($feedCenters as $index => $center) {
+    if ($index > 0) {
+        usleep(1000000); // [MXAIR2026]
     }
-    $errorMessage ??= 'Upstream request failed';
+    $feedUrl = rtrim($config['adsb_feed_url'], '/') . '/' . $center['lat'] . '/' . $center['lon'] . '/' . $center['radius_nm'];
+    [$response, $status, $error] = fetchUpstream($feedUrl, $headers, 5);
+    $upstreamStatus = $status ?? $upstreamStatus;
+    if ($response === false || ($status !== null && $status >= 400)) {
+        $upstreamError = $error ?? ($status !== null ? 'Upstream HTTP ' . $status : 'Upstream request failed');
+        continue;
+    }
+    $data = json_decode($response, true);
+    if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) {
+        $upstreamError = 'Invalid upstream JSON';
+        continue;
+    }
+    $successCount++;
+    $mergedAircraft = array_merge($mergedAircraft, $data['ac']);
+}
+
+if ($successCount === 0) {
+    $errorMessage = $upstreamError ?? 'Upstream request failed';
     updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, $errorMessage);
     $fallbackAc = $stalePayload['ac'] ?? [];
     $fallbackTotal = $stalePayload['total'] ?? count($fallbackAc);
@@ -555,10 +626,11 @@ if ($response === false || ($upstreamStatus !== null && $upstreamStatus >= 400))
             'now' => date('c'),
             'total' => $fallbackTotal,
             'ac' => $fallbackAc,
+            'feed_centers' => $stalePayload['feed_centers'] ?? $feedCenters, // [MXAIR2026]
             'feed_center' => $stalePayload['feed_center'] ?? [
-                'lat' => (float)$storedSettings['feed_center']['lat'],
-                'lon' => (float)$storedSettings['feed_center']['lon'],
-                'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+                'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+                'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+                'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
             ],
             'ui_center' => $stalePayload['ui_center'] ?? [
                 'lat' => (float)$storedSettings['ui_center']['lat'],
@@ -576,34 +648,11 @@ if ($response === false || ($upstreamStatus !== null && $upstreamStatus >= 400))
         'now' => date('c'),
         'total' => 0,
         'ac' => [],
+        'feed_centers' => $feedCenters, // [MXAIR2026]
         'feed_center' => [
-            'lat' => (float)$storedSettings['feed_center']['lat'],
-            'lon' => (float)$storedSettings['feed_center']['lon'],
-            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
-        ],
-        'ui_center' => [
-            'lat' => (float)$storedSettings['ui_center']['lat'],
-            'lon' => (float)$storedSettings['ui_center']['lon'],
-        ],
-    ], 200);
-}
-
-$data = json_decode($response, true);
-if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) {
-    updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, 'Invalid upstream JSON');
-    respond([
-        'ok' => false,
-        'error' => 'Invalid ADS-B response.',
-        'upstream_http' => $upstreamStatus,
-        'cache_hit' => false,
-        'age_ms' => 0,
-        'now' => time(),
-        'total' => 0,
-        'ac' => [],
-        'feed_center' => [
-            'lat' => (float)$storedSettings['feed_center']['lat'],
-            'lon' => (float)$storedSettings['feed_center']['lon'],
-            'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+            'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+            'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+            'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
         ],
         'ui_center' => [
             'lat' => (float)$storedSettings['ui_center']['lat'],
@@ -613,6 +662,7 @@ if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) {
 }
 
 updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, null);
+$data = ['ac' => $mergedAircraft]; // [MXAIR2026]
 
 $borderFilterEnabled = (bool)($config['mex_border_filter_enabled'] ?? false);
 $mexBorderBufferNm = (float)($config['mex_border_buffer_nm'] ?? 10.0);
@@ -626,8 +676,6 @@ $cacheCleanupThreshold = (float)($config['cache_cleanup_threshold'] ?? ($config[
 $filterLogger = static function (string $message): void {
     error_log($message);
 };
-$feedLat = (float)$lat;
-$feedLon = (float)$lon;
 $uiLat = (float)$storedSettings['ui_center']['lat'];
 $uiLon = (float)$storedSettings['ui_center']['lon'];
 $borderLat = (float)($config['border_lat'] ?? 0.0);
@@ -643,9 +691,14 @@ foreach ($data['ac'] as $ac) {
     if ($id === null) {
         continue;
     }
-    $feedDistanceNm = haversineNm($acLat, $acLon, $feedLat, $feedLon);
-    if ($feedDistanceNm > $radius) {
-        continue;
+    $closest = closestFeedCenter($acLat, $acLon, $feedCenters); // [MXAIR2026]
+    if ($closest === null) { // [MXAIR2026]
+        continue; // [MXAIR2026]
+    }
+    $feedDistanceNm = (float)$closest['distance_nm']; // [MXAIR2026]
+    $centerRadius = (float)($closest['center']['radius_nm'] ?? 0); // [MXAIR2026]
+    if ($centerRadius > 0 && $feedDistanceNm > $centerRadius) { // [MXAIR2026]
+        continue; // [MXAIR2026]
     }
     $flight = strtoupper(trim((string)($ac['flight'] ?? '')));
     $flight = $flight !== '' ? $flight : null;
@@ -750,10 +803,11 @@ usort($filtered, function (array $a, array $b): int {
 $payload = [
     'ac' => $filtered,
     'total' => count($filtered),
+    'feed_centers' => $feedCenters, // [MXAIR2026]
     'feed_center' => [
-        'lat' => (float)$storedSettings['feed_center']['lat'],
-        'lon' => (float)$storedSettings['feed_center']['lon'],
-        'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+        'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+        'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+        'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
     ],
     'ui_center' => [
         'lat' => (float)$storedSettings['ui_center']['lat'],
