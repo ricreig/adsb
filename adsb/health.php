@@ -36,8 +36,8 @@ if (functionAvailable('shell_exec')) {
 }
 
 $expectedFeed = [
-    'lat' => '29.8839810',
-    'lon' => '-114.0747826',
+    'lat' => '29.0099590',
+    'lon' => '-114.5552580',
     'radius_nm' => 250,
 ];
 $actualFeed = [
@@ -50,7 +50,7 @@ $feedCenterFixedOk = $actualFeed['lat'] === $expectedFeed['lat']
     && $actualFeed['radius_nm'] === $expectedFeed['radius_nm'];
 $feedCenterWarning = $feedCenterFixedOk
     ? null
-    : 'FEED_CENTER mismatch: expected 29.8839810/-114.0747826 radius 250 NM.';
+    : 'FEED_CENTER mismatch: expected 29.0099590/-114.5552580 radius 250 NM.';
 
 $apiBase = $base === '/' ? '/api/' : $base . 'api/';
 

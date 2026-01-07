@@ -49,6 +49,14 @@ $defaults = [
         'zone' => 'all',
         'max_points' => 2000,
     ],
+    'tracks' => [
+        'show_trail' => false,
+    ],
+    'leader' => [
+        'mode' => 'time',
+        'time_minutes' => 2,
+        'distance_nm' => 2,
+    ],
     'category_styles' => [
         'default' => [
             'color' => '#3aa0ff',
@@ -226,6 +234,25 @@ function normalizeSettings(array $input, array $base, array $config): array
         $maxPoints = filter_var($input['navpoints']['max_points'] ?? null, FILTER_VALIDATE_INT);
         if ($maxPoints !== false && $maxPoints >= 250 && $maxPoints <= 5000) {
             $settings['navpoints']['max_points'] = (int)$maxPoints;
+        }
+    }
+
+    if (isset($input['tracks']) && is_array($input['tracks'])) {
+        $settings['tracks']['show_trail'] = normalizeBoolean($input['tracks']['show_trail'] ?? $settings['tracks']['show_trail']);
+    }
+
+    if (isset($input['leader']) && is_array($input['leader'])) {
+        $mode = strtolower(trim((string)($input['leader']['mode'] ?? $settings['leader']['mode'])));
+        if (in_array($mode, ['time', 'distance'], true)) {
+            $settings['leader']['mode'] = $mode;
+        }
+        $timeMinutes = filter_var($input['leader']['time_minutes'] ?? null, FILTER_VALIDATE_INT);
+        if ($timeMinutes !== false && in_array($timeMinutes, [1, 2, 3, 4, 5], true)) {
+            $settings['leader']['time_minutes'] = (int)$timeMinutes;
+        }
+        $distanceNm = filter_var($input['leader']['distance_nm'] ?? null, FILTER_VALIDATE_INT);
+        if ($distanceNm !== false && in_array($distanceNm, [1, 2, 5, 10, 20], true)) {
+            $settings['leader']['distance_nm'] = (int)$distanceNm;
         }
     }
 

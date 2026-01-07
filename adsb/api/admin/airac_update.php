@@ -227,6 +227,9 @@ $vatmexRepo = $config['vatmex_repo_dir'] ?? null;
 if (!$vatmexRepo && !empty($config['vatmex_dir'])) {
     $vatmexRepo = $config['vatmex_dir'];
 }
+if ($vatmexRepo && !str_starts_with($vatmexRepo, '/')) {
+    $vatmexRepo = rtrim($rootDir, '/') . '/' . ltrim($vatmexRepo, '/');
+}
 if (!$vatmexRepo || !is_dir($vatmexRepo)) {
     respond(['error' => 'VATMEX directory not configured.'], 400);
 }
