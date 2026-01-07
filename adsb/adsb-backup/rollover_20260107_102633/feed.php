@@ -20,7 +20,7 @@ if (!is_dir($cacheDir)) {
     mkdir($cacheDir, 0775, true);
 }
 
-const FEED_SCHEMA_VERSION = 3; // [MXAIR2026-ROLL]
+const FEED_SCHEMA_VERSION = 2;
 
 function loadStoredSettings(array $config): array
 {
@@ -470,139 +470,6 @@ function buildEntryId(array $ac, float $lat, float $lon): ?string
     return null;
 }
 
-function centerCacheKey(array $center): string
-{ // [MXAIR2026-ROLL]
-    $payload = [ // [MXAIR2026-ROLL]
-        'name' => (string)($center['name'] ?? ''), // [MXAIR2026-ROLL]
-        'lat' => (float)($center['lat'] ?? 0), // [MXAIR2026-ROLL]
-        'lon' => (float)($center['lon'] ?? 0), // [MXAIR2026-ROLL]
-        'radius_nm' => (float)($center['radius_nm'] ?? 0), // [MXAIR2026-ROLL]
-    ]; // [MXAIR2026-ROLL]
-    return 'adsb_feed_center_' . md5(json_encode($payload, JSON_UNESCAPED_SLASHES)); // [MXAIR2026-ROLL]
-}
-
-function loadCenterCache(string $path): ?array
-{ // [MXAIR2026-ROLL]
-    $cached = readCacheFile($path); // [MXAIR2026-ROLL]
-    if (!$cached || !is_array($cached)) { // [MXAIR2026-ROLL]
-        return null; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    return $cached; // [MXAIR2026-ROLL]
-}
-
-function writeCenterCache(string $path, array $payload): void
-{ // [MXAIR2026-ROLL]
-    writeCacheFile($path, $payload); // [MXAIR2026-ROLL]
-}
-
-function loadRoundRobinState(string $path, int $total): array
-{ // [MXAIR2026-ROLL]
-    $state = readCacheFile($path); // [MXAIR2026-ROLL]
-    $index = 0; // [MXAIR2026-ROLL]
-    if (is_array($state) && isset($state['index'])) { // [MXAIR2026-ROLL]
-        $index = (int)$state['index']; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    if ($total > 0) { // [MXAIR2026-ROLL]
-        $index = ($index % $total + $total) % $total; // [MXAIR2026-ROLL]
-    } else { // [MXAIR2026-ROLL]
-        $index = 0; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    return [ // [MXAIR2026-ROLL]
-        'index' => $index, // [MXAIR2026-ROLL]
-        'updated_ms' => (int)($state['updated_ms'] ?? 0), // [MXAIR2026-ROLL]
-    ]; // [MXAIR2026-ROLL]
-}
-
-function saveRoundRobinState(string $path, int $index): void
-{ // [MXAIR2026-ROLL]
-    writeCacheFile($path, [ // [MXAIR2026-ROLL]
-        'index' => $index, // [MXAIR2026-ROLL]
-        'updated_ms' => nowMs(), // [MXAIR2026-ROLL]
-    ]); // [MXAIR2026-ROLL]
-}
-
-function selectCentersToRefresh(array $centers, int $maxPerRequest, bool $roundRobinEnabled, string $statePath): array
-{ // [MXAIR2026-ROLL]
-    $total = count($centers); // [MXAIR2026-ROLL]
-    if ($total === 0) { // [MXAIR2026-ROLL]
-        return []; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    $max = max(1, min($maxPerRequest, $total)); // [MXAIR2026-ROLL]
-    if (!$roundRobinEnabled) { // [MXAIR2026-ROLL]
-        return range(0, $max - 1); // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    $state = loadRoundRobinState($statePath, $total); // [MXAIR2026-ROLL]
-    $start = $state['index']; // [MXAIR2026-ROLL]
-    $indices = []; // [MXAIR2026-ROLL]
-    for ($i = 0; $i < $max; $i++) { // [MXAIR2026-ROLL]
-        $indices[] = ($start + $i) % $total; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    $nextIndex = ($start + $max) % $total; // [MXAIR2026-ROLL]
-    saveRoundRobinState($statePath, $nextIndex); // [MXAIR2026-ROLL]
-    return $indices; // [MXAIR2026-ROLL]
-}
-
-function compareAircraftCandidate(array $current, array $candidate): bool
-{ // [MXAIR2026-ROLL]
-    $currentSeen = $current['meta_seen_pos'] ?? null; // [MXAIR2026-ROLL]
-    $candidateSeen = $candidate['meta_seen_pos'] ?? null; // [MXAIR2026-ROLL]
-    if (is_numeric($candidateSeen) && is_numeric($currentSeen)) { // [MXAIR2026-ROLL]
-        if ((float)$candidateSeen !== (float)$currentSeen) { // [MXAIR2026-ROLL]
-            return (float)$candidateSeen < (float)$currentSeen; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-    } elseif (is_numeric($candidateSeen) && !is_numeric($currentSeen)) { // [MXAIR2026-ROLL]
-        return true; // [MXAIR2026-ROLL]
-    } elseif (!is_numeric($candidateSeen) && is_numeric($currentSeen)) { // [MXAIR2026-ROLL]
-        return false; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    $currentDist = $current['meta_distance_nm'] ?? null; // [MXAIR2026-ROLL]
-    $candidateDist = $candidate['meta_distance_nm'] ?? null; // [MXAIR2026-ROLL]
-    if (is_numeric($candidateDist) && is_numeric($currentDist)) { // [MXAIR2026-ROLL]
-        if ((float)$candidateDist !== (float)$currentDist) { // [MXAIR2026-ROLL]
-            return (float)$candidateDist < (float)$currentDist; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-    } elseif (is_numeric($candidateDist) && !is_numeric($currentDist)) { // [MXAIR2026-ROLL]
-        return true; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    return false; // [MXAIR2026-ROLL]
-}
-
-function aggregateAircraft(array $centerPayloads): array
-{ // [MXAIR2026-ROLL]
-    $byId = []; // [MXAIR2026-ROLL]
-    foreach ($centerPayloads as $centerPayload) { // [MXAIR2026-ROLL]
-        $center = $centerPayload['center']; // [MXAIR2026-ROLL]
-        $acList = $centerPayload['ac'] ?? []; // [MXAIR2026-ROLL]
-        if (!is_array($acList)) { // [MXAIR2026-ROLL]
-            continue; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        foreach ($acList as $ac) { // [MXAIR2026-ROLL]
-            if (!is_array($ac) || !isset($ac['lat'], $ac['lon'])) { // [MXAIR2026-ROLL]
-                continue; // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-            $lat = (float)$ac['lat']; // [MXAIR2026-ROLL]
-            $lon = (float)$ac['lon']; // [MXAIR2026-ROLL]
-            $id = buildEntryId($ac, $lat, $lon); // [MXAIR2026-ROLL]
-            if ($id === null) { // [MXAIR2026-ROLL]
-                continue; // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-            $distanceNm = haversineNm($lat, $lon, (float)$center['lat'], (float)$center['lon']); // [MXAIR2026-ROLL]
-            $candidate = [ // [MXAIR2026-ROLL]
-                'ac' => $ac, // [MXAIR2026-ROLL]
-                'meta_seen_pos' => is_numeric($ac['seen_pos'] ?? null) ? (float)$ac['seen_pos'] : null, // [MXAIR2026-ROLL]
-                'meta_distance_nm' => $distanceNm, // [MXAIR2026-ROLL]
-            ]; // [MXAIR2026-ROLL]
-            if (!isset($byId[$id]) || compareAircraftCandidate($byId[$id], $candidate)) { // [MXAIR2026-ROLL]
-                $byId[$id] = $candidate; // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    $merged = []; // [MXAIR2026-ROLL]
-    foreach ($byId as $entry) { // [MXAIR2026-ROLL]
-        $merged[] = $entry['ac']; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    return $merged; // [MXAIR2026-ROLL]
-}
 function closestFeedCenter(float $lat, float $lon, array $centers): ?array
 { // [MXAIR2026]
     $closest = null;
@@ -618,152 +485,235 @@ function closestFeedCenter(float $lat, float $lon, array $centers): ?array
     return $closest;
 }
 
-$storedSettings = loadStoredSettings($config); // [MXAIR2026-ROLL]
-$feedCenters = loadFeedCenters($config, $storedSettings); // [MXAIR2026-ROLL]
-$primaryCenter = $feedCenters[0] ?? [ // [MXAIR2026-ROLL]
-    'lat' => (float)$storedSettings['feed_center']['lat'], // [MXAIR2026-ROLL]
-    'lon' => (float)$storedSettings['feed_center']['lon'], // [MXAIR2026-ROLL]
-    'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'], // [MXAIR2026-ROLL]
-]; // [MXAIR2026-ROLL]
+$storedSettings = loadStoredSettings($config);
+$feedCenters = loadFeedCenters($config, $storedSettings); // [MXAIR2026]
+$primaryCenter = $feedCenters[0] ?? [
+    'lat' => (float)$storedSettings['feed_center']['lat'],
+    'lon' => (float)$storedSettings['feed_center']['lon'],
+    'radius_nm' => (float)$storedSettings['feed_center']['radius_nm'],
+];
 
+$cacheTtlMs = (int)($config['feed_cache_ttl_ms'] ?? 1500); // [MXAIR2026]
+$cacheMaxStaleMs = (int)($config['feed_cache_max_stale_ms'] ?? 5000); // [MXAIR2026]
+$rateLimitS = (float)($config['feed_rate_limit_s'] ?? 1.0);
 $coordDecimals = (int)($config['coordinate_round_decimals'] ?? 3); // [MXAIR2026-ROLL]
 $altThreshold = (int)($config['altitude_change_threshold_ft'] ?? 100); // [MXAIR2026-ROLL]
-$centerCacheTtlMs = (int)($config['feed_center_cache_ttl_ms'] ?? 8000); // [MXAIR2026-ROLL]
-$aggregateCacheTtlMs = (int)($config['feed_aggregate_cache_ttl_ms'] ?? 2500); // [MXAIR2026-ROLL]
-$aggregateTtlS = (int)($config['feed_aggregate_ttl_s'] ?? 90); // [MXAIR2026-ROLL]
-$aggregateTtlMs = max(1000, $aggregateTtlS * 1000); // [MXAIR2026-ROLL]
-$centerMaxStaleMs = max($aggregateTtlMs, $centerCacheTtlMs); // [MXAIR2026-ROLL]
-$centerSpacingMs = (int)($config['feed_center_request_spacing_ms'] ?? 1100); // [MXAIR2026-ROLL]
-$maxCentersPerRequest = (int)($config['feed_max_centers_per_request'] ?? 1); // [MXAIR2026-ROLL]
-$roundRobinEnabled = (bool)($config['feed_round_robin_enabled'] ?? true); // [MXAIR2026-ROLL]
-$backoffMs = 25000; // [MXAIR2026-ROLL]
 
-$headers = []; // [MXAIR2026-ROLL]
-if (!empty($config['adsb_api_key'])) { // [MXAIR2026-ROLL]
-    $headerName = $config['adsb_api_header'] ?: 'X-API-Key'; // [MXAIR2026-ROLL]
-    $headers[] = $headerName . ': ' . $config['adsb_api_key']; // [MXAIR2026-ROLL]
-} // [MXAIR2026-ROLL]
+$cacheKey = 'adsb_feed_' . md5(json_encode($feedCenters, JSON_UNESCAPED_SLASHES)); // [MXAIR2026]
+$cacheFile = $cacheDir . '/' . $cacheKey . '.json';
 
-$rrStatePath = $cacheDir . '/feed_rr_state.json'; // [MXAIR2026-ROLL]
-$selectedCenterIndexes = selectCentersToRefresh($feedCenters, $maxCentersPerRequest, $roundRobinEnabled, $rrStatePath); // [MXAIR2026-ROLL]
-$centerPayloads = []; // [MXAIR2026-ROLL]
-$centerStatuses = []; // [MXAIR2026-ROLL]
+$stalePayload = null;
+$ageMs = null;
+$cacheHit = false;
+$cached = readCache($cacheKey, $cacheFile, $cacheTtlMs, $stalePayload, $ageMs, $cacheHit);
+if ($cached !== null) {
+    respond([
+        'ok' => true,
+        'error' => null,
+        'upstream_http' => null,
+        'cache_hit' => true,
+        'cache_stale' => false,
+        'age_ms' => $ageMs ?? 0,
+        'now' => date('c'),
+        'total' => $cached['total'] ?? count($cached['ac'] ?? []),
+        'ac' => $cached['ac'] ?? [],
+        'feed_centers' => $cached['feed_centers'] ?? $feedCenters, // [MXAIR2026]
+        'feed_center' => $cached['feed_center'] ?? [
+            'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+            'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+            'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
+        ],
+        'ui_center' => $cached['ui_center'] ?? [
+            'lat' => (float)$storedSettings['ui_center']['lat'],
+            'lon' => (float)$storedSettings['ui_center']['lon'],
+        ],
+    ]);
+}
+
+$lockFile = $cacheDir . '/upstream.lock';
+$canRequestUpstream = acquireUpstreamSlot($lockFile, $rateLimitS, 200);
+if (!$canRequestUpstream) {
+    $fallbackAc = $stalePayload['ac'] ?? [];
+    $fallbackTotal = $stalePayload['total'] ?? count($fallbackAc);
+    $staleAge = $ageMs ?? $cacheMaxStaleMs + 1;
+    if ($stalePayload && $staleAge <= $cacheMaxStaleMs) {
+        respond([
+            'ok' => true,
+            'error' => 'Upstream rate limit active. Serving cached data.',
+            'upstream_http' => null,
+            'cache_hit' => true,
+            'cache_stale' => true,
+            'age_ms' => $ageMs ?? 0,
+            'now' => date('c'),
+            'total' => $fallbackTotal,
+            'ac' => $fallbackAc,
+            'feed_centers' => $stalePayload['feed_centers'] ?? $feedCenters, // [MXAIR2026]
+            'feed_center' => $stalePayload['feed_center'] ?? [
+                'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+                'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+                'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
+            ],
+            'ui_center' => $stalePayload['ui_center'] ?? [
+                'lat' => (float)$storedSettings['ui_center']['lat'],
+                'lon' => (float)$storedSettings['ui_center']['lon'],
+            ],
+        ], 200);
+    }
+    respond([
+        'ok' => false,
+        'error' => 'Upstream rate limit active and cache is stale.',
+        'upstream_http' => null,
+        'cache_hit' => false,
+        'cache_stale' => true,
+        'age_ms' => $ageMs ?? 0,
+        'now' => date('c'),
+        'total' => 0,
+        'ac' => [],
+        'feed_centers' => $feedCenters, // [MXAIR2026]
+        'feed_center' => [
+            'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+            'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+            'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
+        ],
+        'ui_center' => [
+            'lat' => (float)$storedSettings['ui_center']['lat'],
+            'lon' => (float)$storedSettings['ui_center']['lon'],
+        ],
+    ], 200);
+}
+
+$headers = [];
+if (!empty($config['adsb_api_key'])) {
+    $headerName = $config['adsb_api_header'] ?: 'X-API-Key';
+    $headers[] = $headerName . ': ' . $config['adsb_api_key'];
+}
+
+$mergedAircraft = []; // [MXAIR2026-ROLL]
 $upstreamStatus = null; // [MXAIR2026-ROLL]
 $upstreamError = null; // [MXAIR2026-ROLL]
-$cacheHit = false; // [MXAIR2026-ROLL]
+$successCount = 0; // [MXAIR2026-ROLL]
 $aggregateStale = false; // [MXAIR2026-ROLL]
-$updatedCenters = 0; // [MXAIR2026-ROLL]
-$globalLockFile = $cacheDir . '/upstream_rr.lock'; // [MXAIR2026-ROLL]
-
 foreach ($feedCenters as $index => $center) { // [MXAIR2026-ROLL]
-    $centerKey = centerCacheKey($center); // [MXAIR2026-ROLL]
+    if ($index > 0) { // [MXAIR2026-ROLL]
+        usleep(1000000); // [MXAIR2026-ROLL]
+    }
+    $centerKey = 'adsb_feed_center_' . md5(json_encode($center, JSON_UNESCAPED_SLASHES)); // [MXAIR2026-ROLL]
     $centerCacheFile = $cacheDir . '/' . $centerKey . '.json'; // [MXAIR2026-ROLL]
-    $centerCache = loadCenterCache($centerCacheFile); // [MXAIR2026-ROLL]
-    $storedMs = $centerCache['stored_ms'] ?? null; // [MXAIR2026-ROLL]
-    $ageMs = is_numeric($storedMs) ? (nowMs() - (int)$storedMs) : null; // [MXAIR2026-ROLL]
-    $backoffUntilMs = (int)($centerCache['backoff_until_ms'] ?? 0); // [MXAIR2026-ROLL]
-    $cacheFresh = $ageMs !== null && $ageMs <= $centerCacheTtlMs; // [MXAIR2026-ROLL]
-    $cacheStaleAllowed = $ageMs !== null && $ageMs <= $centerMaxStaleMs; // [MXAIR2026-ROLL]
-    $shouldRefresh = in_array($index, $selectedCenterIndexes, true) && (!$cacheFresh); // [MXAIR2026-ROLL]
-    $centerStatus = [ // [MXAIR2026-ROLL]
-        'name' => (string)($center['name'] ?? ('center-' . $index)), // [MXAIR2026-ROLL]
-        'cache_age_ms' => $ageMs, // [MXAIR2026-ROLL]
-        'cache_hit' => $cacheFresh, // [MXAIR2026-ROLL]
-        'used_stale' => false, // [MXAIR2026-ROLL]
-        'upstream_http' => $centerCache['upstream_http'] ?? null, // [MXAIR2026-ROLL]
-        'error' => null, // [MXAIR2026-ROLL]
-        'updated' => false, // [MXAIR2026-ROLL]
-        'backoff_until_ms' => $backoffUntilMs ?: null, // [MXAIR2026-ROLL]
-    ]; // [MXAIR2026-ROLL]
-
-    if ($shouldRefresh && nowMs() >= $backoffUntilMs) { // [MXAIR2026-ROLL]
-        $limitSeconds = max(1.0, $centerSpacingMs / 1000); // [MXAIR2026-ROLL]
-        if (acquireUpstreamSlot($globalLockFile, $limitSeconds, 0)) { // [MXAIR2026-ROLL]
-            $feedUrl = rtrim($config['adsb_feed_url'], '/') . '/' . $center['lat'] . '/' . $center['lon'] . '/' . $center['radius_nm']; // [MXAIR2026-ROLL]
-            [$response, $status, $error] = fetchUpstream($feedUrl, $headers, 5); // [MXAIR2026-ROLL]
-            if ($status !== null) { // [MXAIR2026-ROLL]
-                $upstreamStatus = $status; // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-            if ($response !== false && $status !== null && $status < 400) { // [MXAIR2026-ROLL]
-                $data = json_decode($response, true); // [MXAIR2026-ROLL]
-                if (is_array($data) && isset($data['ac']) && is_array($data['ac'])) { // [MXAIR2026-ROLL]
-                    $centerCache = [ // [MXAIR2026-ROLL]
-                        'stored_ms' => nowMs(), // [MXAIR2026-ROLL]
-                        'payload' => [ // [MXAIR2026-ROLL]
-                            'ac' => $data['ac'], // [MXAIR2026-ROLL]
-                            'total' => count($data['ac']), // [MXAIR2026-ROLL]
-                            'feed_center' => $center, // [MXAIR2026-ROLL]
-                        ], // [MXAIR2026-ROLL]
-                        'upstream_http' => $status, // [MXAIR2026-ROLL]
-                        'error' => null, // [MXAIR2026-ROLL]
-                        'last_ok_ms' => nowMs(), // [MXAIR2026-ROLL]
-                        'backoff_until_ms' => 0, // [MXAIR2026-ROLL]
-                    ]; // [MXAIR2026-ROLL]
-                    writeCenterCache($centerCacheFile, $centerCache); // [MXAIR2026-ROLL]
-                    $ageMs = 0; // [MXAIR2026-ROLL]
-                    $cacheFresh = true; // [MXAIR2026-ROLL]
-                    $centerStatus['updated'] = true; // [MXAIR2026-ROLL]
-                    $centerStatus['upstream_http'] = $status; // [MXAIR2026-ROLL]
-                    $updatedCenters++; // [MXAIR2026-ROLL]
-                } else { // [MXAIR2026-ROLL]
-                    $upstreamError = 'Invalid upstream JSON'; // [MXAIR2026-ROLL]
-                    $centerStatus['error'] = $upstreamError; // [MXAIR2026-ROLL]
-                } // [MXAIR2026-ROLL]
-            } else { // [MXAIR2026-ROLL]
-                $statusText = $status !== null ? 'Upstream HTTP ' . $status : 'Upstream request failed'; // [MXAIR2026-ROLL]
-                $upstreamError = $error ?? $statusText; // [MXAIR2026-ROLL]
-                $centerStatus['error'] = $upstreamError; // [MXAIR2026-ROLL]
-                if ($status === 429) { // [MXAIR2026-ROLL]
-                    $backoffUntilMs = nowMs() + $backoffMs; // [MXAIR2026-ROLL]
-                } // [MXAIR2026-ROLL]
-                if ($centerCache) { // [MXAIR2026-ROLL]
-                    $centerCache['upstream_http'] = $status; // [MXAIR2026-ROLL]
-                    $centerCache['error'] = $upstreamError; // [MXAIR2026-ROLL]
-                    $centerCache['backoff_until_ms'] = $backoffUntilMs; // [MXAIR2026-ROLL]
-                    writeCenterCache($centerCacheFile, $centerCache); // [MXAIR2026-ROLL]
-                } else { // [MXAIR2026-ROLL]
-                    writeCenterCache($centerCacheFile, [ // [MXAIR2026-ROLL]
-                        'stored_ms' => nowMs(), // [MXAIR2026-ROLL]
-                        'payload' => null, // [MXAIR2026-ROLL]
-                        'upstream_http' => $status, // [MXAIR2026-ROLL]
-                        'error' => $upstreamError, // [MXAIR2026-ROLL]
-                        'backoff_until_ms' => $backoffUntilMs, // [MXAIR2026-ROLL]
-                    ]); // [MXAIR2026-ROLL]
-                } // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-        } else { // [MXAIR2026-ROLL]
-            $centerStatus['error'] = 'rate_limited'; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-    } elseif ($shouldRefresh && nowMs() < $backoffUntilMs) { // [MXAIR2026-ROLL]
-        $centerStatus['error'] = 'backoff_active'; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-
-    if ($cacheFresh || $cacheStaleAllowed) { // [MXAIR2026-ROLL]
-        if (!$cacheFresh) { // [MXAIR2026-ROLL]
-            $centerStatus['used_stale'] = true; // [MXAIR2026-ROLL]
+    $centerStale = null; // [MXAIR2026-ROLL]
+    $centerAgeMs = null; // [MXAIR2026-ROLL]
+    $centerCacheHit = false; // [MXAIR2026-ROLL]
+    $centerCached = readCache($centerKey, $centerCacheFile, $cacheTtlMs, $centerStale, $centerAgeMs, $centerCacheHit); // [MXAIR2026-ROLL]
+    if ($centerCached !== null) { // [MXAIR2026-ROLL]
+        $successCount++; // [MXAIR2026-ROLL]
+        $mergedAircraft = array_merge($mergedAircraft, $centerCached['ac'] ?? []); // [MXAIR2026-ROLL]
+        continue; // [MXAIR2026-ROLL]
+    }
+    $centerLock = $cacheDir . '/upstream_' . $centerKey . '.lock'; // [MXAIR2026-ROLL]
+    $canRequestCenter = acquireUpstreamSlot($centerLock, $rateLimitS, 200); // [MXAIR2026-ROLL]
+    if (!$canRequestCenter) { // [MXAIR2026-ROLL]
+        $staleAge = $centerAgeMs ?? $cacheMaxStaleMs + 1; // [MXAIR2026-ROLL]
+        if ($centerStale && $staleAge <= $cacheMaxStaleMs) { // [MXAIR2026-ROLL]
             $aggregateStale = true; // [MXAIR2026-ROLL]
-        } else { // [MXAIR2026-ROLL]
-            $cacheHit = true; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        if ($centerCache && isset($centerCache['payload']['ac']) && is_array($centerCache['payload']['ac'])) { // [MXAIR2026-ROLL]
-            $centerPayloads[] = [ // [MXAIR2026-ROLL]
-                'center' => $center, // [MXAIR2026-ROLL]
-                'ac' => $centerCache['payload']['ac'], // [MXAIR2026-ROLL]
-            ]; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
+            $mergedAircraft = array_merge($mergedAircraft, $centerStale['ac'] ?? []); // [MXAIR2026-ROLL]
+            $successCount++; // [MXAIR2026-ROLL]
+            continue; // [MXAIR2026-ROLL]
+        }
+        $upstreamError = 'Upstream rate limit active.'; // [MXAIR2026-ROLL]
+        continue; // [MXAIR2026-ROLL]
+    }
+    $feedUrl = rtrim($config['adsb_feed_url'], '/') . '/' . $center['lat'] . '/' . $center['lon'] . '/' . $center['radius_nm']; // [MXAIR2026-ROLL]
+    [$response, $status, $error] = fetchUpstream($feedUrl, $headers, 5); // [MXAIR2026-ROLL]
+    if ($status !== null) { // [MXAIR2026-ROLL]
+        $upstreamStatus = $status; // [MXAIR2026-ROLL]
+    }
+    if ($response === false || ($status !== null && $status >= 400)) { // [MXAIR2026-ROLL]
+        $upstreamError = $error ?? ($status !== null ? 'Upstream HTTP ' . $status : 'Upstream request failed'); // [MXAIR2026-ROLL]
+        $staleAge = $centerAgeMs ?? $cacheMaxStaleMs + 1; // [MXAIR2026-ROLL]
+        if ($centerStale && $staleAge <= $cacheMaxStaleMs) { // [MXAIR2026-ROLL]
+            $aggregateStale = true; // [MXAIR2026-ROLL]
+            $mergedAircraft = array_merge($mergedAircraft, $centerStale['ac'] ?? []); // [MXAIR2026-ROLL]
+            $successCount++; // [MXAIR2026-ROLL]
+        }
+        continue; // [MXAIR2026-ROLL]
+    }
+    $data = json_decode($response, true); // [MXAIR2026-ROLL]
+    if (!is_array($data) || !isset($data['ac']) || !is_array($data['ac'])) { // [MXAIR2026-ROLL]
+        $upstreamError = 'Invalid upstream JSON'; // [MXAIR2026-ROLL]
+        $staleAge = $centerAgeMs ?? $cacheMaxStaleMs + 1; // [MXAIR2026-ROLL]
+        if ($centerStale && $staleAge <= $cacheMaxStaleMs) { // [MXAIR2026-ROLL]
+            $aggregateStale = true; // [MXAIR2026-ROLL]
+            $mergedAircraft = array_merge($mergedAircraft, $centerStale['ac'] ?? []); // [MXAIR2026-ROLL]
+            $successCount++; // [MXAIR2026-ROLL]
+        }
+        continue; // [MXAIR2026-ROLL]
+    }
+    $centerPayload = [ // [MXAIR2026-ROLL]
+        'ac' => $data['ac'], // [MXAIR2026-ROLL]
+        'total' => count($data['ac']), // [MXAIR2026-ROLL]
+        'feed_center' => $center, // [MXAIR2026-ROLL]
+    ];
+    writeCache($centerKey, $centerCacheFile, $centerPayload, $coordDecimals, $altThreshold); // [MXAIR2026-ROLL]
+    $successCount++; // [MXAIR2026-ROLL]
+    $mergedAircraft = array_merge($mergedAircraft, $data['ac']); // [MXAIR2026-ROLL]
+}
 
-    $centerStatuses[] = $centerStatus; // [MXAIR2026-ROLL]
-} // [MXAIR2026-ROLL]
+if ($successCount === 0) {
+    $errorMessage = $upstreamError ?? 'Upstream request failed';
+    updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, $errorMessage);
+    $fallbackAc = $stalePayload['ac'] ?? [];
+    $fallbackTotal = $stalePayload['total'] ?? count($fallbackAc);
+    if ($stalePayload) {
+        respond([
+            'ok' => true,
+            'error' => 'Upstream unavailable. Serving cached data.',
+            'upstream_http' => $upstreamStatus,
+            'cache_hit' => true,
+            'cache_stale' => true,
+            'age_ms' => $ageMs ?? 0,
+            'now' => date('c'),
+            'total' => $fallbackTotal,
+            'ac' => $fallbackAc,
+            'feed_centers' => $stalePayload['feed_centers'] ?? $feedCenters, // [MXAIR2026]
+            'feed_center' => $stalePayload['feed_center'] ?? [
+                'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+                'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+                'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
+            ],
+            'ui_center' => $stalePayload['ui_center'] ?? [
+                'lat' => (float)$storedSettings['ui_center']['lat'],
+                'lon' => (float)$storedSettings['ui_center']['lon'],
+            ],
+        ], 200);
+    }
+    respond([
+        'ok' => false,
+        'error' => $errorMessage,
+        'upstream_http' => $upstreamStatus,
+        'cache_hit' => false,
+        'cache_stale' => false,
+        'age_ms' => $ageMs ?? 0,
+        'now' => date('c'),
+        'total' => 0,
+        'ac' => [],
+        'feed_centers' => $feedCenters, // [MXAIR2026]
+        'feed_center' => [
+            'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+            'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+            'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
+        ],
+        'ui_center' => [
+            'lat' => (float)$storedSettings['ui_center']['lat'],
+            'lon' => (float)$storedSettings['ui_center']['lon'],
+        ],
+    ], 200);
+}
 
-if ($upstreamError) { // [MXAIR2026-ROLL]
-    updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, $upstreamError); // [MXAIR2026-ROLL]
-} else { // [MXAIR2026-ROLL]
-    updateLastUpstreamStatus($cacheDir . '/upstream.status.json', $upstreamStatus, null); // [MXAIR2026-ROLL]
-} // [MXAIR2026-ROLL]
-
-$mergedAircraft = aggregateAircraft($centerPayloads); // [MXAIR2026-ROLL]
-$data = ['ac' => $mergedAircraft]; // [MXAIR2026-ROLL]
+updateLastUpstreamStatus( // [MXAIR2026-ROLL]
+    $cacheDir . '/upstream.status.json', // [MXAIR2026-ROLL]
+    $upstreamStatus, // [MXAIR2026-ROLL]
+    $aggregateStale ? ($upstreamError ?? 'Upstream degraded') : null // [MXAIR2026-ROLL]
+);
+$data = ['ac' => $mergedAircraft]; // [MXAIR2026]
 
 $borderFilterEnabled = (bool)($config['mex_border_filter_enabled'] ?? false);
 $mexBorderBufferNm = (float)($config['mex_border_buffer_nm'] ?? 10.0);
@@ -899,100 +849,32 @@ usort($filtered, function (array $a, array $b): int {
     return ($a['distance_nm'] ?? 0) <=> ($b['distance_nm'] ?? 0);
 });
 
-$payload = [ // [MXAIR2026-ROLL]
-    'ac' => $filtered, // [MXAIR2026-ROLL]
-    'total' => count($filtered), // [MXAIR2026-ROLL]
-    'feed_centers' => $feedCenters, // [MXAIR2026-ROLL]
-    'feed_center' => [ // [MXAIR2026-ROLL]
-        'lat' => (float)$primaryCenter['lat'], // [MXAIR2026-ROLL]
-        'lon' => (float)$primaryCenter['lon'], // [MXAIR2026-ROLL]
-        'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026-ROLL]
-    ], // [MXAIR2026-ROLL]
-    'ui_center' => [ // [MXAIR2026-ROLL]
-        'lat' => (float)$storedSettings['ui_center']['lat'], // [MXAIR2026-ROLL]
-        'lon' => (float)$storedSettings['ui_center']['lon'], // [MXAIR2026-ROLL]
-    ], // [MXAIR2026-ROLL]
-]; // [MXAIR2026-ROLL]
+$payload = [
+    'ac' => $filtered,
+    'total' => count($filtered),
+    'feed_centers' => $feedCenters, // [MXAIR2026]
+    'feed_center' => [
+        'lat' => (float)$primaryCenter['lat'], // [MXAIR2026]
+        'lon' => (float)$primaryCenter['lon'], // [MXAIR2026]
+        'radius_nm' => (float)$primaryCenter['radius_nm'], // [MXAIR2026]
+    ],
+    'ui_center' => [
+        'lat' => (float)$storedSettings['ui_center']['lat'],
+        'lon' => (float)$storedSettings['ui_center']['lon'],
+    ],
+];
+if (!$aggregateStale) { // [MXAIR2026-ROLL]
+    writeCache($cacheKey, $cacheFile, $payload, $coordDecimals, $altThreshold); // [MXAIR2026-ROLL]
+}
 
-$aggregateCacheFile = $cacheDir . '/feed_aggregate.json'; // [MXAIR2026-ROLL]
-$aggregateCache = readCacheFile($aggregateCacheFile); // [MXAIR2026-ROLL]
-$aggregateCacheAgeMs = null; // [MXAIR2026-ROLL]
-if (is_array($aggregateCache) && isset($aggregateCache['stored_ms'])) { // [MXAIR2026-ROLL]
-    $aggregateCacheAgeMs = nowMs() - (int)$aggregateCache['stored_ms']; // [MXAIR2026-ROLL]
-} // [MXAIR2026-ROLL]
-if ($payload['total'] === 0 && is_array($aggregateCache['payload'] ?? null) && $aggregateCacheAgeMs !== null && $aggregateCacheAgeMs <= $aggregateCacheTtlMs) { // [MXAIR2026-ROLL]
-    $payload = $aggregateCache['payload']; // [MXAIR2026-ROLL]
-    $cacheHit = true; // [MXAIR2026-ROLL]
-    $aggregateStale = true; // [MXAIR2026-ROLL]
-} // [MXAIR2026-ROLL]
-
-$storePath = $cacheDir . '/feed_store.json'; // [MXAIR2026-ROLL]
-$store = readCacheFile($storePath); // [MXAIR2026-ROLL]
-$storeAircraft = is_array($store['aircraft'] ?? null) ? $store['aircraft'] : []; // [MXAIR2026-ROLL]
-$nowMs = nowMs(); // [MXAIR2026-ROLL]
-$aggregateById = []; // [MXAIR2026-ROLL]
-foreach ($payload['ac'] as $entry) { // [MXAIR2026-ROLL]
-    $seenPos = is_numeric($entry['seen_pos'] ?? null) ? (float)$entry['seen_pos'] : null; // [MXAIR2026-ROLL]
-    $lastSeenMs = $seenPos !== null ? max(0, $nowMs - (int)round($seenPos * 1000)) : $nowMs; // [MXAIR2026-ROLL]
-    $entry['last_seen_ms'] = $lastSeenMs; // [MXAIR2026-ROLL]
-    $entry['stale'] = false; // [MXAIR2026-ROLL]
-    $aggregateById[$entry['id']] = $entry; // [MXAIR2026-ROLL]
-    $storeAircraft[$entry['id']] = [ // [MXAIR2026-ROLL]
-        'last_seen_ms' => $lastSeenMs, // [MXAIR2026-ROLL]
-        'entry' => $entry, // [MXAIR2026-ROLL]
-    ]; // [MXAIR2026-ROLL]
-} // [MXAIR2026-ROLL]
-
-foreach ($storeAircraft as $id => $stored) { // [MXAIR2026-ROLL]
-    $lastSeenMs = (int)($stored['last_seen_ms'] ?? 0); // [MXAIR2026-ROLL]
-    if ($nowMs - $lastSeenMs > $aggregateTtlMs) { // [MXAIR2026-ROLL]
-        unset($storeAircraft[$id]); // [MXAIR2026-ROLL]
-        continue; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-    if (!isset($aggregateById[$id]) && isset($stored['entry']) && is_array($stored['entry'])) { // [MXAIR2026-ROLL]
-        $staleEntry = $stored['entry']; // [MXAIR2026-ROLL]
-        $staleEntry['stale'] = true; // [MXAIR2026-ROLL]
-        $staleEntry['last_seen_ms'] = $lastSeenMs; // [MXAIR2026-ROLL]
-        $aggregateById[$id] = $staleEntry; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-} // [MXAIR2026-ROLL]
-
-$aggregateList = array_values($aggregateById); // [MXAIR2026-ROLL]
-usort($aggregateList, function (array $a, array $b): int { // [MXAIR2026-ROLL]
-    return ($a['distance_nm'] ?? 0) <=> ($b['distance_nm'] ?? 0); // [MXAIR2026-ROLL]
-}); // [MXAIR2026-ROLL]
-
-$payload['ac'] = $aggregateList; // [MXAIR2026-ROLL]
-$payload['total'] = count($aggregateList); // [MXAIR2026-ROLL]
-
-writeCacheFile($storePath, [ // [MXAIR2026-ROLL]
-    'stored_ms' => $nowMs, // [MXAIR2026-ROLL]
-    'aircraft' => $storeAircraft, // [MXAIR2026-ROLL]
-]); // [MXAIR2026-ROLL]
-
-writeCacheFile($aggregateCacheFile, [ // [MXAIR2026-ROLL]
-    'stored_ms' => $nowMs, // [MXAIR2026-ROLL]
-    'payload' => $payload, // [MXAIR2026-ROLL]
-]); // [MXAIR2026-ROLL]
-
-$hasData = $payload['total'] > 0; // [MXAIR2026-ROLL]
-$ok = $hasData || $cacheHit || $updatedCenters > 0; // [MXAIR2026-ROLL]
-$errorMessage = $ok ? null : ($upstreamError ?? 'No feed data available'); // [MXAIR2026-ROLL]
-$aggregateStale = $aggregateStale || !$hasData; // [MXAIR2026-ROLL]
-
-respond([ // [MXAIR2026-ROLL]
-    'ok' => $ok, // [MXAIR2026-ROLL]
-    'upstream_http' => $upstreamStatus, // [MXAIR2026-ROLL]
-    'upstream_status_per_center' => $centerStatuses, // [MXAIR2026-ROLL]
-    'centers_status' => $centerStatuses, // [MXAIR2026-ROLL]
-    'cache_hit' => $cacheHit, // [MXAIR2026-ROLL]
+respond([
+    'ok' => true,
+    'upstream_http' => $upstreamStatus,
+    'cache_hit' => false,
+    'age_ms' => 0,
+    'now' => date('c'),
+    'total' => $payload['total'],
+    'ac' => $payload['ac'],
     'cache_stale' => $aggregateStale, // [MXAIR2026-ROLL]
-    'age_ms' => 0, // [MXAIR2026-ROLL]
-    'now' => date('c'), // [MXAIR2026-ROLL]
-    'total' => $payload['total'], // [MXAIR2026-ROLL]
-    'ac' => $payload['ac'], // [MXAIR2026-ROLL]
-    'error' => $errorMessage, // [MXAIR2026-ROLL]
-    'feed_centers' => $feedCenters, // [MXAIR2026-ROLL]
-    'feed_center' => $payload['feed_center'], // [MXAIR2026-ROLL]
-    'ui_center' => $payload['ui_center'], // [MXAIR2026-ROLL]
-]); // [MXAIR2026-ROLL]
+    'error' => $aggregateStale ? 'Upstream degraded. Serving cached data.' : null, // [MXAIR2026-ROLL]
+]);

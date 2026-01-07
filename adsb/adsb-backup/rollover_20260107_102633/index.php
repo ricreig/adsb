@@ -116,9 +116,6 @@ if (is_dir($geojsonDir)) {
             border-radius: 4px;
             padding: 4px 6px;
         }
-        .leaflet-tooltip.track-label.stale { /* // [MXAIR2026-ROLL] */
-            opacity: 0.45; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
         .flight-marker {
             background: transparent !important;
             border: none !important;
@@ -930,8 +927,7 @@ if (is_dir($geojsonDir)) {
         radius_nm: 250,
     };
 
-    const targetTtlMs = <?php echo (int)($config['target_ttl_s'] ?? 120); ?> * 1000; // [MXAIR2026-ROLL]
-    const staleThresholdMs = Math.max(15000, Math.floor(targetTtlMs * 0.6)); // [MXAIR2026-ROLL]
+    const targetTtlMs = <?php echo (int)($config['target_ttl_s'] ?? 120); ?> * 1000;
     const trackHistoryMaxPoints = <?php echo (int)($config['track_history_max_points'] ?? 80); ?>;
     const trackHistoryMaxAgeMs = <?php echo (int)($config['track_history_max_age_s'] ?? 300); ?> * 1000;
 
@@ -2339,19 +2335,18 @@ if (is_dir($geojsonDir)) {
         return '#50fa7b';
     }
 
-    function buildFlightIcon(color, opacity = 1, isStale = false) { // [MXAIR2026-ROLL]
-        const classes = isStale ? 'flight-icon stale' : 'flight-icon'; // [MXAIR2026-ROLL]
-        return L.divIcon({ // [MXAIR2026-ROLL]
-            className: 'flight-marker', // [MXAIR2026-ROLL]
-            html: `<div class="${classes}" style="--flight-color:${color};--flight-opacity:${opacity};"></div>`, // [MXAIR2026-ROLL]
-            iconSize: [12, 12], // [MXAIR2026-ROLL]
-            iconAnchor: [6, 6], // [MXAIR2026-ROLL]
-        }); // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
+    function buildFlightIcon(color, opacity = 1) {
+        return L.divIcon({
+            className: 'flight-marker',
+            html: `<div class="flight-icon" style="--flight-color:${color};--flight-opacity:${opacity};"></div>`,
+            iconSize: [12, 12],
+            iconAnchor: [6, 6],
+        });
+    }
 
-    function updateMarkerIcon(marker, color, opacity = 1, isStale = false) { // [MXAIR2026-ROLL]
-        marker.setIcon(buildFlightIcon(color, opacity, isStale)); // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
+    function updateMarkerIcon(marker, color, opacity = 1) {
+        marker.setIcon(buildFlightIcon(color, opacity));
+    }
 
     function setTooltipOpacity(marker, opacity) {
         if (!marker || typeof marker.getTooltip !== 'function') {
@@ -2399,53 +2394,17 @@ if (is_dir($geojsonDir)) {
         return ['7500', '7600', '7700'].includes(ac.squawk) || (ac.emergency && ac.emergency !== 'none');
     }
 
-    function updateTooltipClass(marker, ac) { // [MXAIR2026-ROLL]
-        const tooltip = marker.getTooltip(); // [MXAIR2026-ROLL]
-        if (!tooltip) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        const el = tooltip.getElement(); // [MXAIR2026-ROLL]
-        if (!el) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        el.classList.toggle('highlight', selectedFlight === ac._id || isEmergency(ac)); // [MXAIR2026-ROLL]
-        el.classList.toggle('stale', ac.is_stale === true); // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-
-    function getLastSeenMs(ac, markerData) { // [MXAIR2026-ROLL]
-        if (!ac) { // [MXAIR2026-ROLL]
-            return markerData && markerData.lastUpdate ? markerData.lastUpdate : null; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        if (Number.isFinite(ac.last_seen_ms)) { // [MXAIR2026-ROLL]
-            return ac.last_seen_ms; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        if (Number.isFinite(ac.last_seen)) { // [MXAIR2026-ROLL]
-            return ac.last_seen; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        return markerData && markerData.lastUpdate ? markerData.lastUpdate : null; // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
-
-    function applyStaleState(flightId, now) { // [MXAIR2026-ROLL]
-        const ac = flights[flightId]; // [MXAIR2026-ROLL]
-        const markerData = flightMarkers[flightId]; // [MXAIR2026-ROLL]
-        if (!markerData || !ac) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        const lastSeen = getLastSeenMs(ac, markerData); // [MXAIR2026-ROLL]
-        const stale = lastSeen !== null ? (now - lastSeen > staleThresholdMs) : false; // [MXAIR2026-ROLL]
-        ac.is_stale = stale; // [MXAIR2026-ROLL]
-        markerData.isStale = stale; // [MXAIR2026-ROLL]
-        const status = getFlightStatus(flightId); // [MXAIR2026-ROLL]
-        const color = flightColor(status); // [MXAIR2026-ROLL]
-        const baseOpacity = status === 'released' ? 0.6 : 1; // [MXAIR2026-ROLL]
-        const markerOpacity = stale ? Math.min(0.35, baseOpacity) : baseOpacity; // [MXAIR2026-ROLL]
-        updateMarkerIcon(markerData.marker, color, markerOpacity, stale); // [MXAIR2026-ROLL]
-        markerData.vector.setStyle({ color, opacity: stale ? 0.25 : (status === 'released' ? 0.3 : 0.7) }); // [MXAIR2026-ROLL]
-        if (markerData.track) { // [MXAIR2026-ROLL]
-            markerData.track.setStyle({ color, opacity: stale ? 0.2 : (status === 'released' ? 0.3 : 0.7) }); // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        updateTooltipClass(markerData.marker, ac); // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
+    function updateTooltipClass(marker, ac) {
+        const tooltip = marker.getTooltip();
+        if (!tooltip) {
+            return;
+        }
+        const el = tooltip.getElement();
+        if (!el) {
+            return;
+        }
+        el.classList.toggle('highlight', selectedFlight === ac._id || isEmergency(ac));
+    }
 
     function bindLabelNoteEditor(marker, flightId) {
         const tooltip = marker.getTooltip();
@@ -2576,6 +2535,7 @@ if (is_dir($geojsonDir)) {
                 tooltip.options.direction = placement.direction;
                 tooltip.options.offset = placement.offset;
             }
+            updateMarkerIcon(existing.marker, color, status === 'released' ? 0.6 : 1);
             existing.vector.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
             setTooltipOpacity(existing.marker, shouldShowLabel(ac) ? 1 : 0);
             const history = updateTrackHistory(existing, ac, showTrail);
@@ -2598,7 +2558,6 @@ if (is_dir($geojsonDir)) {
             }
             updateTooltipClass(existing.marker, ac);
             bindLabelNoteEditor(existing.marker, id);
-            applyStaleState(id, Date.now()); // [MXAIR2026-ROLL]
         } else {
             const marker = L.marker(pos, {
                 icon: buildFlightIcon(color),
@@ -2640,8 +2599,7 @@ if (is_dir($geojsonDir)) {
                 bindLabelNoteEditor(marker, id);
                 updateTooltipClass(marker, ac);
             });
-            flightMarkers[id] = { marker, vector, track, history, lastUpdate: Date.now() }; // [MXAIR2026-ROLL]
-            applyStaleState(id, Date.now()); // [MXAIR2026-ROLL]
+            flightMarkers[id] = { marker, vector, track, history, lastUpdate: Date.now() };
         }
         updateDebugInfo();
     }
@@ -2713,22 +2671,19 @@ if (is_dir($geojsonDir)) {
     }
 
     // Remove stale flights (not updated recently)
-    function pruneFlights() { // [MXAIR2026-ROLL]
-        const now = Date.now(); // [MXAIR2026-ROLL]
-        Object.keys(flightMarkers).forEach(id => { // [MXAIR2026-ROLL]
-            const state = flightMarkers[id]; // [MXAIR2026-ROLL]
-            const ac = flights[id]; // [MXAIR2026-ROLL]
-            const lastSeen = getLastSeenMs(ac, state); // [MXAIR2026-ROLL]
-            if (lastSeen === null) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-            if (now - lastSeen > targetTtlMs) { // [MXAIR2026-ROLL]
-                removeFlight(id); // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-            applyStaleState(id, now); // [MXAIR2026-ROLL]
-        }); // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
+    function pruneFlights() {
+        const now = Date.now();
+        Object.keys(flightMarkers).forEach(id => {
+            const state = flightMarkers[id];
+            if (!state || !state.lastUpdate) {
+                return;
+            }
+        if (now - state.lastUpdate <= targetTtlMs) {
+            return;
+        }
+            removeFlight(id);
+        });
+    }
 
     // Update flight strips in tray
     function buildStripHtml(ac, status) {
@@ -2876,12 +2831,11 @@ if (is_dir($geojsonDir)) {
         clearRoute();
         // Highlight marker
         Object.keys(flightMarkers).forEach(id => {
-            const m = flightMarkers[id].marker; // [MXAIR2026-ROLL]
-            const status = getFlightStatus(id); // [MXAIR2026-ROLL]
-            const color = id === flightId ? '#22d3ee' : flightColor(status); // [MXAIR2026-ROLL]
-            const stale = flights[id]?.is_stale === true; // [MXAIR2026-ROLL]
-            updateMarkerIcon(m, color, status === 'released' ? 0.6 : 1, stale); // [MXAIR2026-ROLL]
-            updateTooltipClass(m, flights[id] || {}); // [MXAIR2026-ROLL]
+            const m = flightMarkers[id].marker;
+            const status = getFlightStatus(id);
+            const color = id === flightId ? '#22d3ee' : flightColor(status);
+            updateMarkerIcon(m, color, status === 'released' ? 0.6 : 1);
+            updateTooltipClass(m, flights[id] || {});
         });
         updateStrips();
         scrollStripIntoView(flightId); // [MXAIR2026]
@@ -2942,15 +2896,14 @@ if (is_dir($geojsonDir)) {
         stripStatuses[flightId] = 'assumed';
         stripOrder = [flightId, ...stripOrder.filter(item => item !== flightId)]; // [MXAIR2026]
         const markerData = flightMarkers[flightId];
-        if (markerData) { // [MXAIR2026-ROLL]
-            const color = flightColor('assumed'); // [MXAIR2026-ROLL]
-            const stale = flights[flightId]?.is_stale === true; // [MXAIR2026-ROLL]
-            updateMarkerIcon(markerData.marker, color, stale ? 0.35 : 1, stale); // [MXAIR2026-ROLL]
-            markerData.vector.setStyle({ color }); // [MXAIR2026-ROLL]
-            if (markerData.track) { // [MXAIR2026-ROLL]
-                markerData.track.setStyle({ color }); // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
+        if (markerData) {
+            const color = flightColor('assumed');
+            updateMarkerIcon(markerData.marker, color);
+            markerData.vector.setStyle({ color });
+            if (markerData.track) {
+                markerData.track.setStyle({ color });
+            }
+        }
         const strip = document.querySelector('.strip[data-flight-id="' + flightId + '"]');
         if (strip) {
             strip.classList.add('assumed');
@@ -2973,15 +2926,14 @@ if (is_dir($geojsonDir)) {
         flightStates[flightId] = 'released';
         stripStatuses[flightId] = 'released';
         const markerData = flightMarkers[flightId];
-        if (markerData) { // [MXAIR2026-ROLL]
-            const color = flightColor('released'); // [MXAIR2026-ROLL]
-            const stale = flights[flightId]?.is_stale === true; // [MXAIR2026-ROLL]
-            updateMarkerIcon(markerData.marker, color, stale ? 0.35 : 0.6, stale); // [MXAIR2026-ROLL]
-            markerData.vector.setStyle({ color, opacity: 0.3 }); // [MXAIR2026-ROLL]
-            if (markerData.track) { // [MXAIR2026-ROLL]
-                markerData.track.setStyle({ color, opacity: 0.3 }); // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
+        if (markerData) {
+            const color = flightColor('released');
+            updateMarkerIcon(markerData.marker, color, 0.6);
+            markerData.vector.setStyle({ color, opacity: 0.3 });
+            if (markerData.track) {
+                markerData.track.setStyle({ color, opacity: 0.3 });
+            }
+        }
         const strip = document.querySelector('.strip[data-flight-id="' + flightId + '"]');
         if (strip) {
             strip.classList.remove('assumed');
@@ -3353,6 +3305,7 @@ if (is_dir($geojsonDir)) {
                     const seenIds = new Set(); // [MXAIR2026-ROLL]
                     const now = Date.now(); // [MXAIR2026-ROLL]
                     const observedAt = Number.isFinite(data.generated_at_ms) ? data.generated_at_ms : now; // [MXAIR2026-ROLL]
+                    const missingGraceMs = Math.max(targetTtlMs, (settings.poll_interval_ms || 1500) * 6); // [MXAIR2026-ROLL]
                     (data.ac || []).forEach(ac => { // [MXAIR2026-ROLL]
                         try { // [MXAIR2026-ROLL]
                             if (!ac) { // [MXAIR2026-ROLL]
@@ -3369,20 +3322,17 @@ if (is_dir($geojsonDir)) {
                             if (seenPos !== null && seenPos * 1000 > targetTtlMs) { // [MXAIR2026-ROLL]
                                 return; // [MXAIR2026-ROLL]
                             }
-                            const lastSeenMs = Number.isFinite(ac.last_seen_ms) // [MXAIR2026-ROLL]
-                                ? ac.last_seen_ms // [MXAIR2026-ROLL]
-                                : (seenPos !== null ? observedAt - (seenPos * 1000) : now); // [MXAIR2026-ROLL]
                             ac.hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid) || null; // [MXAIR2026-ROLL]
                             const flightId = buildAircraftId(ac); // [MXAIR2026-ROLL]
                             if (!flightId) { // [MXAIR2026-ROLL]
                                 return; // [MXAIR2026-ROLL]
                             }
                             ac._id = flightId; // [MXAIR2026-ROLL]
-                            ac.last_seen_ms = lastSeenMs; // [MXAIR2026-ROLL]
                             seenIds.add(flightId); // [MXAIR2026-ROLL]
                             const previous = flights[flightId] || {}; // [MXAIR2026-ROLL]
                             const note = previous.note || noteStore[flightId] || stripNotes[flightId] || ac.note || ''; // [MXAIR2026-ROLL]
-                            flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: lastSeenMs }; // [MXAIR2026-ROLL]
+                            const lastSeen = seenPos !== null ? observedAt - (seenPos * 1000) : now; // [MXAIR2026-ROLL]
+                            flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: lastSeen }; // [MXAIR2026-ROLL]
                             try { // [MXAIR2026-ROLL]
                                 renderFlight(flights[flightId]); // [MXAIR2026-ROLL]
                             } catch (renderErr) { // [MXAIR2026-ROLL]
@@ -3394,6 +3344,14 @@ if (is_dir($geojsonDir)) {
                             console.error('Aircraft update failed', err); // [MXAIR2026-ROLL]
                             reportError('Aircraft update failed', err && err.message ? err.message : String(err || 'Unknown')); // [MXAIR2026-ROLL]
                         } // [MXAIR2026-ROLL]
+                    }); // [MXAIR2026-ROLL]
+                    Object.keys(flightMarkers).forEach(flightId => { // [MXAIR2026-ROLL]
+                        if (!seenIds.has(flightId)) { // [MXAIR2026-ROLL]
+                            const lastSeen = flights[flightId]?.last_seen || flightMarkers[flightId]?.lastUpdate || 0; // [MXAIR2026-ROLL]
+                            if (now - lastSeen > missingGraceMs) { // [MXAIR2026-ROLL]
+                                removeFlight(flightId); // [MXAIR2026-ROLL]
+                            }
+                        }
                     }); // [MXAIR2026-ROLL]
                     pruneFlights(); // [MXAIR2026-ROLL]
                     updateStrips(); // [MXAIR2026-ROLL]
