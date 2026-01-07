@@ -37,7 +37,6 @@ $config = [
     'feed_radius_nm' => 250,
     // National feed centers to cover all Mexico (lat/lon/radius_nm). // [MXAIR2026]
     'feed_centers' => [ // [MXAIR2026]
-        [ 'name' => 'Tijuana', 'lat' => 32.54, 'lon' => -116.95, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
         [ 'name' => 'Mazatlan', 'lat' => 23.2167, 'lon' => -106.4167, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
         [ 'name' => 'Monterrey', 'lat' => 25.6866, 'lon' => -100.3161, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
         [ 'name' => 'Ciudad de Mexico', 'lat' => 19.4326, 'lon' => -99.1332, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
@@ -84,12 +83,6 @@ $config = [
     'feed_cache_ttl_ms' => 2500, // [MXAIR2026]
     // Maximum staleness allowed when serving cached data during rate limiting (milliseconds).
     'feed_cache_max_stale_ms' => 8000, // [MXAIR2026]
-    'feed_center_request_spacing_ms' => 1100, // [MXAIR2026-ROLL]
-    'feed_aggregate_ttl_s' => 90, // [MXAIR2026-ROLL]
-    'feed_center_cache_ttl_ms' => 8000, // [MXAIR2026-ROLL]
-    'feed_aggregate_cache_ttl_ms' => 2500, // [MXAIR2026-ROLL]
-    'feed_max_centers_per_request' => 1, // [MXAIR2026-ROLL]
-    'feed_round_robin_enabled' => true, // [MXAIR2026-ROLL]
     'feed_rate_limit_s' => 1.0,
     // Cache directory for feed responses and upstream rate limiting.
     'feed_cache_dir' => __DIR__ . '/data/cache',
