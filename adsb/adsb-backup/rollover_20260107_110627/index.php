@@ -84,7 +84,7 @@ if (is_dir($geojsonDir)) {
         }
         /* customise Leaflet tooltip (track label) */
         .leaflet-tooltip.track-label {
-            color: var(--track-color, var(--label-color)); /* // [MXAIR2026-ROLL] */
+            color: var(--label-color);
             font-size: calc(var(--label-size) * 1px);
             font-weight: bold;
             white-space: pre;
@@ -94,15 +94,12 @@ if (is_dir($geojsonDir)) {
             box-shadow: none;
             padding: 0;
         }
-        .leaflet-tooltip.track-label::before { /* // [MXAIR2026-ROLL] */
-            display: none; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
         .leaflet-tooltip.track-label .label-line {
             display: block;
             line-height: 1.15;
         }
         .leaflet-tooltip.track-label .label-muted {
-            color: var(--track-muted-color, rgba(0, 255, 0, 0.7)); /* // [MXAIR2026-ROLL] */
+            color: rgba(0, 255, 0, 0.7);
         }
         .leaflet-tooltip.track-label .label-note {
             cursor: text;
@@ -113,12 +110,12 @@ if (is_dir($geojsonDir)) {
             padding: 0 2px;
             border-radius: 2px;
         }
-        .leaflet-tooltip.track-label.highlight { /* // [MXAIR2026-ROLL] */
-            background: var(--track-highlight-bg, rgba(3, 11, 20, 0.75)); /* // [MXAIR2026-ROLL] */
-            border: 1px solid var(--track-border-color, rgba(0, 255, 0, 0.5)); /* // [MXAIR2026-ROLL] */
-            border-radius: 4px; /* // [MXAIR2026-ROLL] */
-            padding: 4px 6px; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
+        .leaflet-tooltip.track-label.highlight {
+            background: rgba(3, 11, 20, 0.75);
+            border: 1px solid rgba(0, 255, 0, 0.5);
+            border-radius: 4px;
+            padding: 4px 6px;
+        }
         .leaflet-tooltip.track-label.stale { /* // [MXAIR2026-ROLL] */
             opacity: 0.45; /* // [MXAIR2026-ROLL] */
         } /* // [MXAIR2026-ROLL] */
@@ -298,56 +295,23 @@ if (is_dir($geojsonDir)) {
             font-size: 16px;
             text-align: center;
         }
-        .layer-control { /* // [MXAIR2026-ROLL] */
-            margin-bottom: 10px; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-control label { /* // [MXAIR2026-ROLL] */
-            display: flex; /* // [MXAIR2026-ROLL] */
-            align-items: center; /* // [MXAIR2026-ROLL] */
-            margin-bottom: 4px; /* // [MXAIR2026-ROLL] */
-            cursor: pointer; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-control input[type="checkbox"] { /* // [MXAIR2026-ROLL] */
-            margin-right: 6px; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-control input[type="color"] { /* // [MXAIR2026-ROLL] */
-            margin-left: auto; /* // [MXAIR2026-ROLL] */
-            border: none; /* // [MXAIR2026-ROLL] */
-            background: none; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-group { /* // [MXAIR2026-ROLL] */
-            border: 1px solid #2f405b; /* // [MXAIR2026-ROLL] */
-            border-radius: 6px; /* // [MXAIR2026-ROLL] */
-            margin-top: 10px; /* // [MXAIR2026-ROLL] */
-            background: #16263a; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-group-header { /* // [MXAIR2026-ROLL] */
-            display: flex; /* // [MXAIR2026-ROLL] */
-            justify-content: space-between; /* // [MXAIR2026-ROLL] */
-            align-items: center; /* // [MXAIR2026-ROLL] */
-            padding: 6px 8px; /* // [MXAIR2026-ROLL] */
-            background: #1f3148; /* // [MXAIR2026-ROLL] */
-            cursor: pointer; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-group-header span { /* // [MXAIR2026-ROLL] */
-            font-weight: bold; /* // [MXAIR2026-ROLL] */
-            font-size: 12px; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-group-actions { /* // [MXAIR2026-ROLL] */
-            display: flex; /* // [MXAIR2026-ROLL] */
-            gap: 4px; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-group-actions button { /* // [MXAIR2026-ROLL] */
-            font-size: 11px; /* // [MXAIR2026-ROLL] */
-            padding: 2px 6px; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-group-body { /* // [MXAIR2026-ROLL] */
-            padding: 8px; /* // [MXAIR2026-ROLL] */
-            display: none; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .layer-group.open .layer-group-body { /* // [MXAIR2026-ROLL] */
-            display: block; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
+        .layer-control {
+            margin-bottom: 10px;
+        }
+        .layer-control label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+            cursor: pointer;
+        }
+        .layer-control input[type="checkbox"] {
+            margin-right: 6px;
+        }
+        .layer-control input[type="color"] {
+            margin-left: auto;
+            border: none;
+            background: none;
+        }
         #flightInfo {
             margin-top: 20px;
             font-size: 14px;
@@ -379,31 +343,25 @@ if (is_dir($geojsonDir)) {
             margin-top: 6px;
             width: 100%;
         }
-        .strip { /* // [MXAIR2026-ROLL] */
-            background: #1d2d44; /* // [MXAIR2026-ROLL] */
-            border: 1px solid #3f5270; /* // [MXAIR2026-ROLL] */
-            padding: 6px; /* // [MXAIR2026-ROLL] */
-            margin-bottom: 6px; /* // [MXAIR2026-ROLL] */
-            cursor: pointer; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.announced { /* // [MXAIR2026-ROLL] */
-            background: #f2f4f7; /* // [MXAIR2026-ROLL] */
-            border-color: #d5dbe4; /* // [MXAIR2026-ROLL] */
-            color: #1f2937; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.announced .strip-header, /* // [MXAIR2026-ROLL] */
-        .strip.announced .strip-meta { /* // [MXAIR2026-ROLL] */
-            color: #1f2937; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.assumed { /* // [MXAIR2026-ROLL] */
-            border-color: #22c55e; /* // [MXAIR2026-ROLL] */
-            background: #173625; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.handoff { /* // [MXAIR2026-ROLL] */
-            border-color: #00c1ff; /* // [MXAIR2026-ROLL] */
-            background: #0b3a4f; /* // [MXAIR2026-ROLL] */
-            opacity: 0.75; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
+        .strip {
+            background: #1d2d44;
+            border: 1px solid #3f5270;
+            padding: 6px;
+            margin-bottom: 6px;
+            cursor: pointer;
+        }
+        .strip.assumed {
+            border-color: #00c1ff;
+            background: #0b3a4f; /* // [MXAIR2026] */
+        }
+        .strip.pending {
+            border-color: #facc15;
+            background: #3a2f1a;
+        }
+        .strip.released {
+            opacity: 0.5;
+            border-color: #5c6b7a;
+        }
         .strip.selected {
             box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.7);
         }
@@ -426,41 +384,26 @@ if (is_dir($geojsonDir)) {
             display: inline-block;
             margin-right: 6px;
         }
-        .strip .strip-status { /* // [MXAIR2026-ROLL] */
-            font-size: 11px; /* // [MXAIR2026-ROLL] */
-            font-weight: bold; /* // [MXAIR2026-ROLL] */
-            padding: 2px 6px; /* // [MXAIR2026-ROLL] */
-            border-radius: 4px; /* // [MXAIR2026-ROLL] */
-            background: #2b3a50; /* // [MXAIR2026-ROLL] */
-            color: #d0e6ff; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.announced .strip-status { /* // [MXAIR2026-ROLL] */
-            background: #e5e7eb; /* // [MXAIR2026-ROLL] */
-            color: #1f2937; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.assumed .strip-status { /* // [MXAIR2026-ROLL] */
-            background: #22c55e; /* // [MXAIR2026-ROLL] */
-            color: #052e13; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.handoff .strip-status { /* // [MXAIR2026-ROLL] */
-            background: #00c1ff; /* // [MXAIR2026-ROLL] */
-            color: #052338; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.emergency-7700 { /* // [MXAIR2026-ROLL] */
-            background: #7f1d1d; /* // [MXAIR2026-ROLL] */
-            border-color: #dc2626; /* // [MXAIR2026-ROLL] */
-            color: #fef2f2; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.emergency-7600 { /* // [MXAIR2026-ROLL] */
-            background: #92400e; /* // [MXAIR2026-ROLL] */
-            border-color: #facc15; /* // [MXAIR2026-ROLL] */
-            color: #fef3c7; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
-        .strip.emergency-7500 { /* // [MXAIR2026-ROLL] */
-            background: #9a3412; /* // [MXAIR2026-ROLL] */
-            border-color: #fb923c; /* // [MXAIR2026-ROLL] */
-            color: #ffedd5; /* // [MXAIR2026-ROLL] */
-        } /* // [MXAIR2026-ROLL] */
+        .strip .strip-status {
+            font-size: 11px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #2b3a50;
+            color: #d0e6ff;
+        }
+        .strip.assumed .strip-status {
+            background: #22c55e;
+            color: #052e13;
+        }
+        .strip.pending .strip-status {
+            background: #facc15;
+            color: #1f2937;
+        }
+        .strip.released .strip-status {
+            background: #4b5563;
+            color: #d1d5db;
+        }
         #brlToggle,
         #brlAirport,
         #brlClear {
@@ -688,16 +631,16 @@ if (is_dir($geojsonDir)) {
                     <input type="checkbox" id="showSquawk" checked/>
                     Show Squawk
                 </label>
-                <div class="settings-section"> <!-- // [MXAIR2026-ROLL] -->
-                    <strong>Fixes</strong> <!-- // [MXAIR2026-ROLL] -->
-                    <label style="display:block;margin-bottom:4px;"> <!-- // [MXAIR2026-ROLL] -->
-                        <input type="checkbox" id="navpointsEnabled" checked/> <!-- // [MXAIR2026-ROLL] -->
-                        Show Fixes <!-- // [MXAIR2026-ROLL] -->
+                <div class="settings-section">
+                    <strong>Navpoints</strong>
+                    <label style="display:block;margin-bottom:4px;">
+                        <input type="checkbox" id="navpointsEnabled" checked/>
+                        Show Navpoints
                     </label>
-                    <label style="display:block;margin-bottom:4px;">Fixes Min Zoom <!-- // [MXAIR2026-ROLL] -->
+                    <label style="display:block;margin-bottom:4px;">Navpoints Min Zoom
                         <input type="number" id="navpointsMinZoom" min="3" max="14" value="7" style="width:60px;margin-left:4px;"/>
                     </label>
-                    <label style="display:block;margin-bottom:4px;">Fixes Zone <!-- // [MXAIR2026-ROLL] -->
+                    <label style="display:block;margin-bottom:4px;">Navpoints Zone
                         <select id="navpointsZone" style="margin-left:4px;">
                             <option value="all">Todo México</option>
                             <option value="nw">NW México</option>
@@ -709,7 +652,7 @@ if (is_dir($geojsonDir)) {
                             <option value="mmtj-120">Entorno MMTJ (120 NM)</option>
                         </select>
                     </label>
-                    <label style="display:block;margin-bottom:4px;">Max Fixes <!-- // [MXAIR2026-ROLL] -->
+                    <label style="display:block;margin-bottom:4px;">Max Navpoints
                         <input type="number" id="navpointsMax" min="250" max="5000" value="2000" style="width:70px;margin-left:4px;"/>
                     </label>
                 </div>
@@ -758,75 +701,22 @@ if (is_dir($geojsonDir)) {
                 <button id="applySettings" style="width:100%;margin-top:10px;">Apply Settings</button>
             </div>
             <div class="panel-section" data-tab="layers">
-                <div class="panel-actions"> <!-- // [MXAIR2026-ROLL] -->
-                    <button id="layersShowAll" type="button">Mostrar todo</button> <!-- // [MXAIR2026-ROLL] -->
-                    <button id="layersHideAll" type="button">Ocultar todo</button> <!-- // [MXAIR2026-ROLL] -->
+                <div class="panel-actions">
+                    <button id="layersShowAll" type="button">Mostrar todo</button>
+                    <button id="layersHideAll" type="button">Ocultar todo</button>
                 </div>
-                <div class="layer-control" style="margin-top:8px;"> <!-- // [MXAIR2026-ROLL] -->
-                    <strong>Filtrar por estaciones</strong> <!-- // [MXAIR2026-ROLL] -->
-                    <input type="text" id="stationFilterInput" placeholder="MMMX, MMTJ, ..." style="width:100%;margin-top:4px;"/> <!-- // [MXAIR2026-ROLL] -->
-                    <small style="display:block;margin-top:4px;color:#9fb3c8;">Activará SID/STAR/CTR/ATZ/TMA según las estaciones.</small> <!-- // [MXAIR2026-ROLL] -->
+                <div class="layer-control" style="margin-top:8px;">
+                    <strong>Opciones globales</strong>
+                    <label><input type="checkbox" id="airwaysUpperToggle"/> Aerovías superiores</label>
+                    <label><input type="checkbox" id="airwaysLowerToggle"/> Aerovías inferiores</label>
+                    <label><input type="checkbox" id="firLimitsToggle"/> Límites FIR</label>
                 </div>
-                <div class="layer-group open" data-group="limits"> <!-- // [MXAIR2026-ROLL] -->
-                    <div class="layer-group-header"> <!-- // [MXAIR2026-ROLL] -->
-                        <span>Límites</span> <!-- // [MXAIR2026-ROLL] -->
-                        <div class="layer-group-actions"> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-show" data-group="limits">Mostrar</button> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-hide" data-group="limits">Ocultar</button> <!-- // [MXAIR2026-ROLL] -->
-                        </div>
-                    </div>
-                    <div class="layer-group-body" id="layerGroup-limits"></div> <!-- // [MXAIR2026-ROLL] -->
+                <div class="layer-control" style="margin-top:8px;">
+                    <strong>Filtrar por estaciones</strong>
+                    <input type="text" id="stationFilterInput" placeholder="MMMX, MMTJ, ..." style="width:100%;margin-top:4px;"/>
+                    <small style="display:block;margin-top:4px;color:#9fb3c8;">Activará SID/STAR/CTR/ATZ/TMA según las estaciones.</small>
                 </div>
-                <div class="layer-group" data-group="airspace"> <!-- // [MXAIR2026-ROLL] -->
-                    <div class="layer-group-header"> <!-- // [MXAIR2026-ROLL] -->
-                        <span>Espacio aéreo</span> <!-- // [MXAIR2026-ROLL] -->
-                        <div class="layer-group-actions"> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-show" data-group="airspace">Mostrar</button> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-hide" data-group="airspace">Ocultar</button> <!-- // [MXAIR2026-ROLL] -->
-                        </div>
-                    </div>
-                    <div class="layer-group-body" id="layerGroup-airspace"></div> <!-- // [MXAIR2026-ROLL] -->
-                </div>
-                <div class="layer-group" data-group="restricted"> <!-- // [MXAIR2026-ROLL] -->
-                    <div class="layer-group-header"> <!-- // [MXAIR2026-ROLL] -->
-                        <span>Restrictivas</span> <!-- // [MXAIR2026-ROLL] -->
-                        <div class="layer-group-actions"> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-show" data-group="restricted">Mostrar</button> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-hide" data-group="restricted">Ocultar</button> <!-- // [MXAIR2026-ROLL] -->
-                        </div>
-                    </div>
-                    <div class="layer-group-body" id="layerGroup-restricted"></div> <!-- // [MXAIR2026-ROLL] -->
-                </div>
-                <div class="layer-group" data-group="navigation"> <!-- // [MXAIR2026-ROLL] -->
-                    <div class="layer-group-header"> <!-- // [MXAIR2026-ROLL] -->
-                        <span>Navegación</span> <!-- // [MXAIR2026-ROLL] -->
-                        <div class="layer-group-actions"> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-show" data-group="navigation">Mostrar</button> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-hide" data-group="navigation">Ocultar</button> <!-- // [MXAIR2026-ROLL] -->
-                        </div>
-                    </div>
-                    <div class="layer-group-body" id="layerGroup-navigation"></div> <!-- // [MXAIR2026-ROLL] -->
-                </div>
-                <div class="layer-group" data-group="procedures"> <!-- // [MXAIR2026-ROLL] -->
-                    <div class="layer-group-header"> <!-- // [MXAIR2026-ROLL] -->
-                        <span>Procedimientos</span> <!-- // [MXAIR2026-ROLL] -->
-                        <div class="layer-group-actions"> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-show" data-group="procedures">Mostrar</button> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-hide" data-group="procedures">Ocultar</button> <!-- // [MXAIR2026-ROLL] -->
-                        </div>
-                    </div>
-                    <div class="layer-group-body" id="layerGroup-procedures"></div> <!-- // [MXAIR2026-ROLL] -->
-                </div>
-                <div class="layer-group" data-group="aerodrome"> <!-- // [MXAIR2026-ROLL] -->
-                    <div class="layer-group-header"> <!-- // [MXAIR2026-ROLL] -->
-                        <span>Aeródromo</span> <!-- // [MXAIR2026-ROLL] -->
-                        <div class="layer-group-actions"> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-show" data-group="aerodrome">Mostrar</button> <!-- // [MXAIR2026-ROLL] -->
-                            <button type="button" class="group-hide" data-group="aerodrome">Ocultar</button> <!-- // [MXAIR2026-ROLL] -->
-                        </div>
-                    </div>
-                    <div class="layer-group-body" id="layerGroup-aerodrome"></div> <!-- // [MXAIR2026-ROLL] -->
-                </div>
+                <div id="layerControls" style="margin-top:10px;"></div>
             </div>
             <div class="panel-section" data-tab="appearance">
                 <label style="display:block;margin-bottom:4px;">Basemap Style
@@ -1317,15 +1207,12 @@ if (is_dir($geojsonDir)) {
     ], 8);
     L.control.zoom({ position: 'bottomleft' }).addTo(map); // [MXAIR2026]
     const tileStatus = document.getElementById('tileStatus');
-    map.createPane('tracks'); // [MXAIR2026-ROLL]
-    map.createPane('targets'); // [MXAIR2026-ROLL]
-    map.createPane('labels'); // [MXAIR2026-ROLL]
-    map.createPane('callouts'); // [MXAIR2026-ROLL]
-    map.getPane('tracks').style.zIndex = 350; // [MXAIR2026-ROLL]
-    map.getPane('targets').style.zIndex = 450; // [MXAIR2026-ROLL]
-    map.getPane('callouts').style.zIndex = 600; // [MXAIR2026-ROLL]
-    map.getPane('labels').style.zIndex = 650; // [MXAIR2026-ROLL]
-    map.on('zoomend move', () => updateAllCallouts()); // [MXAIR2026-ROLL]
+    map.createPane('tracks');
+    map.createPane('targets');
+    map.createPane('labels');
+    map.getPane('tracks').style.zIndex = 350;
+    map.getPane('targets').style.zIndex = 450;
+    map.getPane('labels').style.zIndex = 650;
     const trackRenderer = L.canvas({ padding: 0.5 });
     const targetRenderer = L.canvas({ padding: 0.5 });
     const basemapConfig = {
@@ -1400,24 +1287,17 @@ if (is_dir($geojsonDir)) {
     switchBasemap('dark');
 
     // [MXAIR2026] GeoJSON overlay layers (fixed list)
-    const layerStateKey = 'adsb_layer_states'; // [MXAIR2026-ROLL]
-    const layerToggles = {}; // [MXAIR2026-ROLL]
-    const layerDataCache = {}; // [MXAIR2026-ROLL]
-    let navpointsLastWarning = 0; // [MXAIR2026-ROLL]
-    let navpointsGeojson = null; // [MXAIR2026-ROLL]
-    let navpointsGeojsonLoaded = false; // [MXAIR2026-ROLL]
-    let navpointsUrl = resolveGeojsonFile('nav-fixes'); // [MXAIR2026-ROLL]
-    const navpointColour = '#ffd166'; // [MXAIR2026-ROLL]
-    const stationFilterInput = document.getElementById('stationFilterInput'); // [MXAIR2026-ROLL]
-    let stationFilterList = []; // [MXAIR2026-ROLL]
-    const layerGroupContainers = { // [MXAIR2026-ROLL]
-        limits: document.getElementById('layerGroup-limits'), // [MXAIR2026-ROLL]
-        airspace: document.getElementById('layerGroup-airspace'), // [MXAIR2026-ROLL]
-        restricted: document.getElementById('layerGroup-restricted'), // [MXAIR2026-ROLL]
-        navigation: document.getElementById('layerGroup-navigation'), // [MXAIR2026-ROLL]
-        procedures: document.getElementById('layerGroup-procedures'), // [MXAIR2026-ROLL]
-        aerodrome: document.getElementById('layerGroup-aerodrome'), // [MXAIR2026-ROLL]
-    };
+    const layerControlsDiv = document.getElementById('layerControls');
+    const layerStateKey = 'adsb_layer_states';
+    const layerToggles = {};
+    const layerDataCache = {};
+    let navpointsLastWarning = 0;
+    let navpointsGeojson = null;
+    let navpointsGeojsonLoaded = false;
+    let navpointsUrl = resolveGeojsonFile('nav-points'); // [MXAIR2026-ROLL]
+    const navpointColour = '#ffd166';
+    const stationFilterInput = document.getElementById('stationFilterInput');
+    let stationFilterList = [];
 
     function buildNavpointIcon() {
         return L.divIcon({
@@ -1428,23 +1308,22 @@ if (is_dir($geojsonDir)) {
         });
     }
 
-    const navpointsLayer = L.layerGroup(); // [MXAIR2026-ROLL]
+    const navpointsLayer = L.layerGroup(); // [MXAIR2026]
 
-    const layerDefinitions = { // [MXAIR2026-ROLL]
-        fir: { id: 'fir-limits', label: 'FIR/ACC', group: 'limits', file: resolveGeojsonFile('fir-limits'), layer: L.geoJSON(null, { style: { color: '#00b4d8', weight: 2, fill: false } }) }, // [MXAIR2026-ROLL]
-        border: { id: 'mex-border', label: 'Frontera', group: 'limits', file: resolveGeojsonFile('mex-border'), layer: L.geoJSON(null, { style: { color: '#f4d35e', weight: 2, fill: false, dashArray: '6 4' } }) }, // [MXAIR2026-ROLL]
-        ctr: { id: 'ctr', label: 'CTR', group: 'airspace', file: resolveGeojsonFile('ctr'), layer: L.geoJSON(null, { style: { color: '#06d6a0', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
-        tma: { id: 'tma', label: 'TMA', group: 'airspace', file: resolveGeojsonFile('tma'), layer: L.geoJSON(null, { style: { color: '#5ec8ff', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
-        atz: { id: 'atz', label: 'ATZ', group: 'airspace', file: resolveGeojsonFile('atz'), layer: L.geoJSON(null, { style: { color: '#ffd166', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
-        restricted: { id: 'restricted-areas', label: 'Áreas restringidas', group: 'restricted', file: resolveGeojsonFile('restricted-areas'), layer: L.geoJSON(null, { style: { color: '#ef476f', weight: 2, fillOpacity: 0.12 } }) }, // [MXAIR2026-ROLL]
-        navpoints: { id: 'nav-fixes', label: 'Fixes', group: 'navigation', layer: navpointsLayer }, // [MXAIR2026-ROLL]
-        airwaysUpper: { id: 'airways-upper', label: 'Aerovías superiores', group: 'navigation', file: resolveGeojsonFile('airways-upper'), layer: L.geoJSON(null, { style: { color: '#9b5de5', weight: 1.5, dashArray: '4 4' } }) }, // [MXAIR2026-ROLL]
-        airwaysLower: { id: 'airways-lower', label: 'Aerovías inferiores', group: 'navigation', file: resolveGeojsonFile('airways-lower'), layer: L.geoJSON(null, { style: { color: '#00bbf9', weight: 1.5, dashArray: '2 4' } }) }, // [MXAIR2026-ROLL]
-        sid: { id: 'procedures-sid', label: 'SID', group: 'procedures', file: resolveGeojsonFile('procedures-sid'), layer: L.geoJSON(null, { style: { color: '#ff9f1c', weight: 2, dashArray: '6 6' } }) }, // [MXAIR2026-ROLL]
-        star: { id: 'procedures-star', label: 'STAR', group: 'procedures', file: resolveGeojsonFile('procedures-star'), layer: L.geoJSON(null, { style: { color: '#2ec4b6', weight: 2, dashArray: '2 6' } }) }, // [MXAIR2026-ROLL]
-        app: { id: 'procedures-app', label: 'APP', group: 'procedures', file: resolveGeojsonFile('procedures-app'), layer: L.geoJSON(null, { style: { color: '#e71d36', weight: 2 } }) }, // [MXAIR2026-ROLL]
-        asmgcs: { id: 'aerodrome-asmgcs', label: 'ASMGCS', group: 'aerodrome', file: resolveGeojsonFile('aerodrome-asmgcs'), layer: L.geoJSON(null, { style: { color: '#f97316', weight: 1.5 } }) }, // [MXAIR2026-ROLL]
-    }; // [MXAIR2026-ROLL]
+    const layerDefinitions = {
+        fir: { id: 'fir-limits', label: 'FIR', file: resolveGeojsonFile('fir-limits'), layer: L.geoJSON(null, { style: { color: '#00b4d8', weight: 2, fill: false } }) }, // [MXAIR2026-ROLL]
+        border: { id: 'mex-border', label: 'Frontera', file: resolveGeojsonFile('mex-border'), layer: L.geoJSON(null, { style: { color: '#f4d35e', weight: 2, fill: false, dashArray: '6 4' } }) }, // [MXAIR2026-ROLL]
+        ctr: { id: 'ctr', label: 'CTR', file: resolveGeojsonFile('ctr'), layer: L.geoJSON(null, { style: { color: '#06d6a0', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
+        tma: { id: 'tma', label: 'TMA', file: resolveGeojsonFile('tma'), layer: L.geoJSON(null, { style: { color: '#5ec8ff', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
+        atz: { id: 'atz', label: 'ATZ', file: resolveGeojsonFile('atz'), layer: L.geoJSON(null, { style: { color: '#ffd166', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
+        restricted: { id: 'restricted-areas', label: 'Áreas restringidas', file: resolveGeojsonFile('restricted-areas'), layer: L.geoJSON(null, { style: { color: '#ef476f', weight: 2, fillOpacity: 0.12 } }) }, // [MXAIR2026-ROLL]
+        navpoints: { id: 'nav-points', label: 'Navpoints', layer: navpointsLayer },
+        sid: { id: 'sid', label: 'SID', file: resolveGeojsonFile('sid'), layer: L.geoJSON(null, { style: { color: '#ff9f1c', weight: 2, dashArray: '6 6' } }) }, // [MXAIR2026-ROLL]
+        star: { id: 'star', label: 'STAR', file: resolveGeojsonFile('star'), layer: L.geoJSON(null, { style: { color: '#2ec4b6', weight: 2, dashArray: '2 6' } }) }, // [MXAIR2026-ROLL]
+        app: { id: 'app', label: 'APP', file: resolveGeojsonFile('app'), layer: L.geoJSON(null, { style: { color: '#e71d36', weight: 2 } }) }, // [MXAIR2026-ROLL]
+        airwaysUpper: { id: 'airways-upper', label: 'Aerovías superiores', file: resolveGeojsonFile('airways-upper'), layer: L.geoJSON(null, { style: { color: '#9b5de5', weight: 1.5, dashArray: '4 4' } }) }, // [MXAIR2026-ROLL]
+        airwaysLower: { id: 'airways-lower', label: 'Aerovías inferiores', file: resolveGeojsonFile('airways-lower'), layer: L.geoJSON(null, { style: { color: '#00bbf9', weight: 1.5, dashArray: '2 4' } }) }, // [MXAIR2026-ROLL]
+    };
     const layerAvailability = {}; // [MXAIR2026-ROLL]
     function applyGeojsonManifest(manifest) { // [MXAIR2026-ROLL]
         geojsonManifest = manifest && typeof manifest === 'object' ? { ...manifest } : {}; // [MXAIR2026-ROLL]
@@ -1457,7 +1336,7 @@ if (is_dir($geojsonDir)) {
             if (Object.prototype.hasOwnProperty.call(def, 'file')) { // [MXAIR2026-ROLL]
                 def.file = available ? geojsonManifest[def.id] : null; // [MXAIR2026-ROLL]
             }
-            if (def.id === 'nav-fixes') { // [MXAIR2026-ROLL]
+            if (def.id === 'nav-points') { // [MXAIR2026-ROLL]
                 navpointsUrl = available ? geojsonManifest[def.id] : null; // [MXAIR2026-ROLL]
             }
         }); // [MXAIR2026-ROLL]
@@ -1476,7 +1355,7 @@ if (is_dir($geojsonDir)) {
     }
     applyGeojsonManifest(geojsonManifest); // [MXAIR2026-ROLL]
 
-    const stationFilteredLayers = new Set(['ctr', 'tma', 'atz', 'sid', 'star', 'app']); // [MXAIR2026-ROLL]
+    const stationFilteredLayers = new Set(['ctr', 'tma', 'atz', 'sid', 'star', 'app']);
 
     function loadLayerState() {
         const defaults = {
@@ -1486,8 +1365,7 @@ if (is_dir($geojsonDir)) {
             tma: false,
             atz: false,
             restricted: false,
-            navpoints: settings.navpoints.enabled, // [MXAIR2026-ROLL]
-            asmgcs: false, // [MXAIR2026-ROLL]
+            navpoints: settings.navpoints.enabled,
             sid: false,
             star: false,
             app: false,
@@ -1554,19 +1432,19 @@ if (is_dir($geojsonDir)) {
         }
         navpointsGeojsonLoaded = true;
         if (!navpointsUrl) { // [MXAIR2026-ROLL]
-            reportError('Fixes layer missing', 'nav-fixes.geojson not available'); // [MXAIR2026-ROLL]
+            reportError('Navpoints layer missing', 'nav-points.geojson not available'); // [MXAIR2026-ROLL]
             navpointsGeojsonLoaded = false; // [MXAIR2026-ROLL]
             return Promise.resolve(null); // [MXAIR2026-ROLL]
         }
         const url = buildUrl(navpointsUrl); // [MXAIR2026-ROLL]
-        return fetchGeoJson(url, `Fixes layer (${url})`) // [MXAIR2026-ROLL]
+        return fetchGeoJson(url, `Navpoints layer (${url})`)
             .then(data => {
                 navpointsGeojson = data;
                 return data;
             })
             .catch(err => {
                 navpointsGeojsonLoaded = false;
-                reportError('Failed to load fixes layer', formatFetchErrorDetail(err, url)); // [MXAIR2026-ROLL]
+                reportError('Failed to load navpoints layer', formatFetchErrorDetail(err, url));
                 return null;
             });
     }
@@ -1612,29 +1490,25 @@ if (is_dir($geojsonDir)) {
         }
     }
 
-    function addLayerToggle(key, labelText, defaultEnabled = false) { // [MXAIR2026-ROLL]
-        const def = layerDefinitions[key]; // [MXAIR2026-ROLL]
-        if (!def || !def.group || !layerGroupContainers[def.group]) { // [MXAIR2026-ROLL]
-            return null; // [MXAIR2026-ROLL]
+    function addLayerToggle(key, labelText, defaultEnabled = false) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'layer-control';
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = layerState[key] ?? defaultEnabled;
+        checkbox.addEventListener('change', () => {
+            setLayerEnabled(key, checkbox.checked);
+        });
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(` ${labelText}`));
+        wrapper.appendChild(label);
+        layerControlsDiv.appendChild(wrapper);
+        layerToggles[key] = checkbox;
+        if (checkbox.checked) {
+            setLayerEnabled(key, true);
         }
-        const wrapper = document.createElement('div'); // [MXAIR2026-ROLL]
-        wrapper.className = 'layer-control'; // [MXAIR2026-ROLL]
-        const label = document.createElement('label'); // [MXAIR2026-ROLL]
-        const checkbox = document.createElement('input'); // [MXAIR2026-ROLL]
-        checkbox.type = 'checkbox'; // [MXAIR2026-ROLL]
-        checkbox.checked = layerState[key] ?? defaultEnabled; // [MXAIR2026-ROLL]
-        checkbox.addEventListener('change', () => { // [MXAIR2026-ROLL]
-            setLayerEnabled(key, checkbox.checked); // [MXAIR2026-ROLL]
-        }); // [MXAIR2026-ROLL]
-        label.appendChild(checkbox); // [MXAIR2026-ROLL]
-        label.appendChild(document.createTextNode(` ${labelText}`)); // [MXAIR2026-ROLL]
-        wrapper.appendChild(label); // [MXAIR2026-ROLL]
-        layerGroupContainers[def.group].appendChild(wrapper); // [MXAIR2026-ROLL]
-        layerToggles[key] = checkbox; // [MXAIR2026-ROLL]
-        if (checkbox.checked) { // [MXAIR2026-ROLL]
-            setLayerEnabled(key, true); // [MXAIR2026-ROLL]
-        }
-        return checkbox; // [MXAIR2026-ROLL]
+        return checkbox;
     }
 
     function syncLayerToggleAvailability() { // [MXAIR2026-ROLL]
@@ -1651,77 +1525,62 @@ if (is_dir($geojsonDir)) {
                     toggle.checked = false; // [MXAIR2026-ROLL]
                     setLayerEnabled(key, false); // [MXAIR2026-ROLL]
                 } // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-            if (!available && def.group && layerGroupContainers[def.group]) { // [MXAIR2026-ROLL]
-                const wrapper = toggle ? toggle.closest('.layer-control') : null; // [MXAIR2026-ROLL]
-                if (wrapper) { // [MXAIR2026-ROLL]
-                    wrapper.remove(); // [MXAIR2026-ROLL]
-                } // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
+            }
         }); // [MXAIR2026-ROLL]
-        updateGroupStates(); // [MXAIR2026-ROLL]
+        if (airwaysUpperToggle) { // [MXAIR2026-ROLL]
+            const available = layerAvailability['airways-upper'] !== false; // [MXAIR2026-ROLL]
+            airwaysUpperToggle.disabled = !available; // [MXAIR2026-ROLL]
+            if (!available) { // [MXAIR2026-ROLL]
+                airwaysUpperToggle.checked = false; // [MXAIR2026-ROLL]
+                setLayerEnabled('airwaysUpper', false); // [MXAIR2026-ROLL]
+            } // [MXAIR2026-ROLL]
+        } // [MXAIR2026-ROLL]
+        if (airwaysLowerToggle) { // [MXAIR2026-ROLL]
+            const available = layerAvailability['airways-lower'] !== false; // [MXAIR2026-ROLL]
+            airwaysLowerToggle.disabled = !available; // [MXAIR2026-ROLL]
+            if (!available) { // [MXAIR2026-ROLL]
+                airwaysLowerToggle.checked = false; // [MXAIR2026-ROLL]
+                setLayerEnabled('airwaysLower', false); // [MXAIR2026-ROLL]
+            } // [MXAIR2026-ROLL]
+        } // [MXAIR2026-ROLL]
+        if (firLimitsToggle) { // [MXAIR2026-ROLL]
+            const available = layerAvailability['fir-limits'] !== false; // [MXAIR2026-ROLL]
+            firLimitsToggle.disabled = !available; // [MXAIR2026-ROLL]
+            if (!available) { // [MXAIR2026-ROLL]
+                firLimitsToggle.checked = false; // [MXAIR2026-ROLL]
+                setLayerEnabled('fir', false); // [MXAIR2026-ROLL]
+            } // [MXAIR2026-ROLL]
+        } // [MXAIR2026-ROLL]
+        if (layerToggles.navpoints && layerAvailability['nav-points'] === false) { // [MXAIR2026-ROLL]
+            layerToggles.navpoints.checked = false; // [MXAIR2026-ROLL]
+        } // [MXAIR2026-ROLL]
     }
 
-    function updateGroupStates() { // [MXAIR2026-ROLL]
-        Object.keys(layerGroupContainers).forEach(groupId => { // [MXAIR2026-ROLL]
-            const container = layerGroupContainers[groupId]; // [MXAIR2026-ROLL]
-            if (!container) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            }
-            const groupEl = container.closest('.layer-group'); // [MXAIR2026-ROLL]
-            if (!groupEl) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            }
-            const hasControls = !!container.querySelector('.layer-control'); // [MXAIR2026-ROLL]
-            groupEl.style.display = hasControls ? '' : 'none'; // [MXAIR2026-ROLL]
-        }); // [MXAIR2026-ROLL]
+    addLayerToggle('ctr', 'CTR');
+    addLayerToggle('tma', 'TMA');
+    addLayerToggle('atz', 'ATZ');
+    addLayerToggle('restricted', 'Áreas restringidas');
+    addLayerToggle('navpoints', 'Navpoints', settings.navpoints.enabled);
+    addLayerToggle('sid', 'SID');
+    addLayerToggle('star', 'STAR');
+    addLayerToggle('app', 'APP');
+    addLayerToggle('border', 'Frontera');
+
+    const airwaysUpperToggle = document.getElementById('airwaysUpperToggle');
+    const airwaysLowerToggle = document.getElementById('airwaysLowerToggle');
+    const firLimitsToggle = document.getElementById('firLimitsToggle');
+    if (airwaysUpperToggle) {
+        airwaysUpperToggle.checked = !!layerState.airwaysUpper;
+        airwaysUpperToggle.addEventListener('change', () => setLayerEnabled('airwaysUpper', airwaysUpperToggle.checked));
     }
-
-    function setGroupEnabled(groupId, enabled) { // [MXAIR2026-ROLL]
-        Object.keys(layerDefinitions).forEach(key => { // [MXAIR2026-ROLL]
-            const def = layerDefinitions[key]; // [MXAIR2026-ROLL]
-            if (!def || def.group !== groupId) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            }
-            const toggle = layerToggles[key]; // [MXAIR2026-ROLL]
-            if (toggle && !toggle.disabled) { // [MXAIR2026-ROLL]
-                toggle.checked = enabled; // [MXAIR2026-ROLL]
-                setLayerEnabled(key, enabled); // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-        }); // [MXAIR2026-ROLL]
+    if (airwaysLowerToggle) {
+        airwaysLowerToggle.checked = !!layerState.airwaysLower;
+        airwaysLowerToggle.addEventListener('change', () => setLayerEnabled('airwaysLower', airwaysLowerToggle.checked));
     }
-
-    document.querySelectorAll('.layer-group-header').forEach(header => { // [MXAIR2026-ROLL]
-        header.addEventListener('click', (event) => { // [MXAIR2026-ROLL]
-            if (event.target.closest('button')) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            }
-            const group = header.closest('.layer-group'); // [MXAIR2026-ROLL]
-            if (group) { // [MXAIR2026-ROLL]
-                group.classList.toggle('open'); // [MXAIR2026-ROLL]
-            }
-        }); // [MXAIR2026-ROLL]
-    }); // [MXAIR2026-ROLL]
-    document.querySelectorAll('.group-show').forEach(btn => { // [MXAIR2026-ROLL]
-        btn.addEventListener('click', () => setGroupEnabled(btn.dataset.group, true)); // [MXAIR2026-ROLL]
-    }); // [MXAIR2026-ROLL]
-    document.querySelectorAll('.group-hide').forEach(btn => { // [MXAIR2026-ROLL]
-        btn.addEventListener('click', () => setGroupEnabled(btn.dataset.group, false)); // [MXAIR2026-ROLL]
-    }); // [MXAIR2026-ROLL]
-
-    addLayerToggle('fir', 'FIR/ACC'); // [MXAIR2026-ROLL]
-    addLayerToggle('border', 'Frontera'); // [MXAIR2026-ROLL]
-    addLayerToggle('ctr', 'CTR'); // [MXAIR2026-ROLL]
-    addLayerToggle('tma', 'TMA'); // [MXAIR2026-ROLL]
-    addLayerToggle('atz', 'ATZ'); // [MXAIR2026-ROLL]
-    addLayerToggle('restricted', 'Áreas restringidas'); // [MXAIR2026-ROLL]
-    addLayerToggle('navpoints', 'Fixes', settings.navpoints.enabled); // [MXAIR2026-ROLL]
-    addLayerToggle('airwaysUpper', 'Aerovías superiores'); // [MXAIR2026-ROLL]
-    addLayerToggle('airwaysLower', 'Aerovías inferiores'); // [MXAIR2026-ROLL]
-    addLayerToggle('sid', 'SID'); // [MXAIR2026-ROLL]
-    addLayerToggle('star', 'STAR'); // [MXAIR2026-ROLL]
-    addLayerToggle('app', 'APP'); // [MXAIR2026-ROLL]
-    addLayerToggle('asmgcs', 'ASMGCS'); // [MXAIR2026-ROLL]
+    if (firLimitsToggle) {
+        firLimitsToggle.checked = !!layerState.fir;
+        firLimitsToggle.addEventListener('change', () => setLayerEnabled('fir', firLimitsToggle.checked));
+    }
     syncLayerToggleAvailability(); // [MXAIR2026-ROLL]
     refreshGeojsonManifest(); // [MXAIR2026-ROLL]
 
@@ -1751,14 +1610,14 @@ if (is_dir($geojsonDir)) {
         layersShowAll.addEventListener('click', () => {
             Object.keys(layerDefinitions).forEach(key => {
                 const toggle = layerToggles[key];
-                if (toggle && !toggle.disabled) { // [MXAIR2026-ROLL]
+                if (toggle) {
                     toggle.checked = true;
-                } else if (toggle) { // [MXAIR2026-ROLL]
-                    toggle.checked = false; // [MXAIR2026-ROLL]
                 }
-                setLayerEnabled(key, toggle && !toggle.disabled); // [MXAIR2026-ROLL]
+                setLayerEnabled(key, true);
             });
-            updateGroupStates(); // [MXAIR2026-ROLL]
+            if (airwaysUpperToggle) airwaysUpperToggle.checked = true;
+            if (airwaysLowerToggle) airwaysLowerToggle.checked = true;
+            if (firLimitsToggle) firLimitsToggle.checked = true;
         });
     }
     if (layersHideAll) {
@@ -1770,7 +1629,9 @@ if (is_dir($geojsonDir)) {
                 }
                 setLayerEnabled(key, false);
             });
-            updateGroupStates(); // [MXAIR2026-ROLL]
+            if (airwaysUpperToggle) airwaysUpperToggle.checked = false;
+            if (airwaysLowerToggle) airwaysLowerToggle.checked = false;
+            if (firLimitsToggle) firLimitsToggle.checked = false;
         });
     }
 
@@ -1869,7 +1730,7 @@ if (is_dir($geojsonDir)) {
             }).addTo(navpointsLayer);
             if (total > limit && Date.now() - navpointsLastWarning > 5000) {
                 navpointsLastWarning = Date.now();
-                showNotification('Límite de fixes alcanzado; acércate para más detalle.'); // [MXAIR2026-ROLL]
+                showNotification('Límite de navpoints alcanzado; acércate para más detalle.');
             }
             return;
         }
@@ -2293,8 +2154,8 @@ if (is_dir($geojsonDir)) {
                 stripDataCache = {};
                 strips.forEach(strip => {
                     stripNotes[strip.hex] = strip.note || '';
-                    stripStatuses[strip.hex] = normalizeStatus(strip.status || 'announced'); // [MXAIR2026-ROLL]
-                    flightStates[strip.hex] = normalizeStatus(strip.status || flightStates[strip.hex] || 'announced'); // [MXAIR2026-ROLL]
+                    stripStatuses[strip.hex] = strip.status || 'normal';
+                    flightStates[strip.hex] = strip.status || flightStates[strip.hex] || 'normal';
                     stripDataCache[strip.hex] = { ...strip, _id: strip.hex };
                 });
                 updateStrips();
@@ -2318,8 +2179,8 @@ if (is_dir($geojsonDir)) {
                         .map(entry => entry.hex);
                     data.strips.forEach(entry => {
                         stripNotes[entry.hex] = entry.note || '';
-                        stripStatuses[entry.hex] = normalizeStatus(entry.status || 'announced'); // [MXAIR2026-ROLL]
-                        flightStates[entry.hex] = normalizeStatus(entry.status || flightStates[entry.hex] || 'announced'); // [MXAIR2026-ROLL]
+                        stripStatuses[entry.hex] = entry.status || 'normal';
+                        flightStates[entry.hex] = entry.status || flightStates[entry.hex] || 'normal';
                         stripDataCache[entry.hex] = { ...entry, _id: entry.hex };
                     });
                 }
@@ -2351,7 +2212,7 @@ if (is_dir($geojsonDir)) {
         if (!stripOrder.includes(flightId)) {
             stripOrder.push(flightId);
         }
-        const status = normalizeStatus(flightStates[flightId] || stripStatuses[flightId] || 'announced'); // [MXAIR2026-ROLL]
+        const status = flightStates[flightId] || stripStatuses[flightId] || 'normal';
         const note = flights[flightId]?.note || stripNotes[flightId] || '';
         const hex = flights[flightId]?.hex;
         if (hex) {
@@ -2392,7 +2253,7 @@ if (is_dir($geojsonDir)) {
         popup.innerHTML = `
             <strong>${escapeHtml(callsign)}</strong><br>
             Matrícula: ${escapeHtml(registrationLabel || '---')}<br> <!-- // [MXAIR2026-ROLL] -->
-            Estado: ${escapeHtml(statusLabels[status] || status.toUpperCase())}<br> <!-- // [MXAIR2026-ROLL] -->
+            Estado: ${escapeHtml(status.toUpperCase())}<br>
             ALT ${escapeHtml(alt)} · GS ${escapeHtml(gs)} · TRK ${escapeHtml(trk)}<br>
             TYPE ${escapeHtml(type)} · RUTA ${escapeHtml(route)}<br>
             Plan: <span class=\"strip-plan\">${escapeHtml(ac.routeSummary || 'Cargando...')}</span><br>
@@ -2420,7 +2281,7 @@ if (is_dir($geojsonDir)) {
                     if (!state || !state.hex) {
                         return;
                     }
-                    flightStates[state.hex] = normalizeStatus(state.status || flightStates[state.hex] || 'announced'); // [MXAIR2026-ROLL]
+                    flightStates[state.hex] = state.status || flightStates[state.hex] || 'normal';
                 });
                 updateStrips();
             })
@@ -2464,72 +2325,18 @@ if (is_dir($geojsonDir)) {
     }
 
     // Add or update a flight marker on the map
-    const statusLabels = { // [MXAIR2026-ROLL]
-        announced: 'ANNOUNCED', // [MXAIR2026-ROLL]
-        assumed: 'ASSUMED', // [MXAIR2026-ROLL]
-        handoff: 'HAND-OFF', // [MXAIR2026-ROLL]
-    }; // [MXAIR2026-ROLL]
-
-    function normalizeStatus(status) { // [MXAIR2026-ROLL]
-        const value = String(status || '').toLowerCase(); // [MXAIR2026-ROLL]
-        if (value === 'assumed') { // [MXAIR2026-ROLL]
-            return 'assumed'; // [MXAIR2026-ROLL]
-        }
-        if (value === 'released' || value === 'handoff' || value === 'hand-off' || value === 'hand_off') { // [MXAIR2026-ROLL]
-            return 'handoff'; // [MXAIR2026-ROLL]
-        }
-        return 'announced'; // [MXAIR2026-ROLL]
+    function getFlightStatus(hex) {
+        return flightStates[hex] || stripStatuses[hex] || 'normal';
     }
 
-    function getFlightStatus(hex) { // [MXAIR2026-ROLL]
-        return normalizeStatus(flightStates[hex] || stripStatuses[hex] || 'announced'); // [MXAIR2026-ROLL]
-    }
-
-    function emergencyCode(ac) { // [MXAIR2026-ROLL]
-        const squawk = (ac && ac.squawk ? String(ac.squawk) : '').trim(); // [MXAIR2026-ROLL]
-        if (squawk === '7700') return '7700'; // [MXAIR2026-ROLL]
-        if (squawk === '7600') return '7600'; // [MXAIR2026-ROLL]
-        if (squawk === '7500') return '7500'; // [MXAIR2026-ROLL]
-        return null; // [MXAIR2026-ROLL]
-    }
-
-    function statusColor(status) { // [MXAIR2026-ROLL]
-        if (status === 'assumed') { // [MXAIR2026-ROLL]
-            return '#22c55e'; // [MXAIR2026-ROLL]
+    function flightColor(status) {
+        if (status === 'assumed') {
+            return '#00c1ff';
         }
-        if (status === 'handoff') { // [MXAIR2026-ROLL]
-            return '#00c1ff'; // [MXAIR2026-ROLL]
+        if (status === 'released') {
+            return '#8f9bb3';
         }
-        return '#e5e7eb'; // [MXAIR2026-ROLL]
-    }
-
-    function emergencyColor(ac) { // [MXAIR2026-ROLL]
-        const code = emergencyCode(ac); // [MXAIR2026-ROLL]
-        if (code === '7700') { // [MXAIR2026-ROLL]
-            return '#dc2626'; // [MXAIR2026-ROLL]
-        }
-        if (code === '7600') { // [MXAIR2026-ROLL]
-            return '#facc15'; // [MXAIR2026-ROLL]
-        }
-        if (code === '7500') { // [MXAIR2026-ROLL]
-            return '#fb923c'; // [MXAIR2026-ROLL]
-        }
-        return null; // [MXAIR2026-ROLL]
-    }
-
-    function flightColor(status, ac) { // [MXAIR2026-ROLL]
-        return emergencyColor(ac) || statusColor(status); // [MXAIR2026-ROLL]
-    }
-
-    function hexToRgba(hex, alpha) { // [MXAIR2026-ROLL]
-        const clean = (hex || '').replace('#', ''); // [MXAIR2026-ROLL]
-        if (clean.length !== 6) { // [MXAIR2026-ROLL]
-            return `rgba(0,0,0,${alpha})`; // [MXAIR2026-ROLL]
-        }
-        const r = parseInt(clean.slice(0, 2), 16); // [MXAIR2026-ROLL]
-        const g = parseInt(clean.slice(2, 4), 16); // [MXAIR2026-ROLL]
-        const b = parseInt(clean.slice(4, 6), 16); // [MXAIR2026-ROLL]
-        return `rgba(${r},${g},${b},${alpha})`; // [MXAIR2026-ROLL]
+        return '#50fa7b';
     }
 
     function buildFlightIcon(color, opacity = 1, isStale = false) { // [MXAIR2026-ROLL]
@@ -2588,24 +2395,8 @@ if (is_dir($geojsonDir)) {
         return { direction: 'top', offset: [0, -12] };
     }
 
-    function isEmergency(ac) { // [MXAIR2026-ROLL]
-        return emergencyCode(ac) !== null || (ac.emergency && ac.emergency !== 'none'); // [MXAIR2026-ROLL]
-    }
-
-    function updateTooltipAppearance(marker, ac, status) { // [MXAIR2026-ROLL]
-        const tooltip = marker.getTooltip(); // [MXAIR2026-ROLL]
-        if (!tooltip) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        }
-        const el = tooltip.getElement(); // [MXAIR2026-ROLL]
-        if (!el) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        }
-        const color = flightColor(status, ac); // [MXAIR2026-ROLL]
-        el.style.setProperty('--track-color', color); // [MXAIR2026-ROLL]
-        el.style.setProperty('--track-border-color', hexToRgba(color, 0.6)); // [MXAIR2026-ROLL]
-        el.style.setProperty('--track-highlight-bg', hexToRgba('#0b1320', 0.75)); // [MXAIR2026-ROLL]
-        el.style.setProperty('--track-muted-color', hexToRgba(color, 0.65)); // [MXAIR2026-ROLL]
+    function isEmergency(ac) {
+        return ['7500', '7600', '7700'].includes(ac.squawk) || (ac.emergency && ac.emergency !== 'none');
     }
 
     function updateTooltipClass(marker, ac) { // [MXAIR2026-ROLL]
@@ -2617,78 +2408,9 @@ if (is_dir($geojsonDir)) {
         if (!el) { // [MXAIR2026-ROLL]
             return; // [MXAIR2026-ROLL]
         } // [MXAIR2026-ROLL]
-        const status = getFlightStatus(ac._id || ac.hex); // [MXAIR2026-ROLL]
-        updateTooltipAppearance(marker, ac, status); // [MXAIR2026-ROLL]
         el.classList.toggle('highlight', selectedFlight === ac._id || isEmergency(ac)); // [MXAIR2026-ROLL]
         el.classList.toggle('stale', ac.is_stale === true); // [MXAIR2026-ROLL]
     } // [MXAIR2026-ROLL]
-
-    function tooltipAnchorPoint(tooltipEl, direction) { // [MXAIR2026-ROLL]
-        const containerRect = map.getContainer().getBoundingClientRect(); // [MXAIR2026-ROLL]
-        const rect = tooltipEl.getBoundingClientRect(); // [MXAIR2026-ROLL]
-        if (!rect.width || !rect.height) { // [MXAIR2026-ROLL]
-            return null; // [MXAIR2026-ROLL]
-        }
-        const xLeft = rect.left - containerRect.left; // [MXAIR2026-ROLL]
-        const xRight = rect.right - containerRect.left; // [MXAIR2026-ROLL]
-        const yTop = rect.top - containerRect.top; // [MXAIR2026-ROLL]
-        const yBottom = rect.bottom - containerRect.top; // [MXAIR2026-ROLL]
-        if (direction === 'right') { // [MXAIR2026-ROLL]
-            return L.point(xLeft, yTop + rect.height / 2); // [MXAIR2026-ROLL]
-        }
-        if (direction === 'left') { // [MXAIR2026-ROLL]
-            return L.point(xRight, yTop + rect.height / 2); // [MXAIR2026-ROLL]
-        }
-        if (direction === 'bottom') { // [MXAIR2026-ROLL]
-            return L.point(xLeft + rect.width / 2, yTop); // [MXAIR2026-ROLL]
-        }
-        return L.point(xLeft + rect.width / 2, yBottom); // [MXAIR2026-ROLL]
-    }
-
-    function updateCalloutLine(markerData, ac, status) { // [MXAIR2026-ROLL]
-        if (!markerData || !markerData.marker) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        }
-        const tooltip = markerData.marker.getTooltip(); // [MXAIR2026-ROLL]
-        const tooltipEl = tooltip ? tooltip.getElement() : null; // [MXAIR2026-ROLL]
-        if (!tooltipEl || !shouldShowLabel(ac)) { // [MXAIR2026-ROLL]
-            if (markerData.callout) { // [MXAIR2026-ROLL]
-                map.removeLayer(markerData.callout); // [MXAIR2026-ROLL]
-                markerData.callout = null; // [MXAIR2026-ROLL]
-            }
-            return; // [MXAIR2026-ROLL]
-        }
-        const anchorPoint = tooltipAnchorPoint(tooltipEl, tooltip.options.direction); // [MXAIR2026-ROLL]
-        if (!anchorPoint) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        }
-        const labelLatLng = map.containerPointToLatLng(anchorPoint); // [MXAIR2026-ROLL]
-        const markerLatLng = markerData.marker.getLatLng(); // [MXAIR2026-ROLL]
-        const color = flightColor(status, ac); // [MXAIR2026-ROLL]
-        const opacity = status === 'handoff' ? 0.4 : 0.7; // [MXAIR2026-ROLL]
-        if (!markerData.callout) { // [MXAIR2026-ROLL]
-            markerData.callout = L.polyline([markerLatLng, labelLatLng], { // [MXAIR2026-ROLL]
-                color, // [MXAIR2026-ROLL]
-                weight: 1, // [MXAIR2026-ROLL]
-                opacity, // [MXAIR2026-ROLL]
-                pane: 'callouts', // [MXAIR2026-ROLL]
-                interactive: false, // [MXAIR2026-ROLL]
-            }).addTo(map); // [MXAIR2026-ROLL]
-        } else { // [MXAIR2026-ROLL]
-            markerData.callout.setLatLngs([markerLatLng, labelLatLng]); // [MXAIR2026-ROLL]
-            markerData.callout.setStyle({ color, opacity }); // [MXAIR2026-ROLL]
-        }
-    }
-
-    function updateAllCallouts() { // [MXAIR2026-ROLL]
-        Object.keys(flightMarkers).forEach(id => { // [MXAIR2026-ROLL]
-            const ac = flights[id]; // [MXAIR2026-ROLL]
-            if (!ac) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            }
-            updateCalloutLine(flightMarkers[id], ac, getFlightStatus(id)); // [MXAIR2026-ROLL]
-        }); // [MXAIR2026-ROLL]
-    }
 
     function getLastSeenMs(ac, markerData) { // [MXAIR2026-ROLL]
         if (!ac) { // [MXAIR2026-ROLL]
@@ -2714,16 +2436,15 @@ if (is_dir($geojsonDir)) {
         ac.is_stale = stale; // [MXAIR2026-ROLL]
         markerData.isStale = stale; // [MXAIR2026-ROLL]
         const status = getFlightStatus(flightId); // [MXAIR2026-ROLL]
-        const color = flightColor(status, ac); // [MXAIR2026-ROLL]
-        const baseOpacity = status === 'handoff' ? 0.6 : 1; // [MXAIR2026-ROLL]
+        const color = flightColor(status); // [MXAIR2026-ROLL]
+        const baseOpacity = status === 'released' ? 0.6 : 1; // [MXAIR2026-ROLL]
         const markerOpacity = stale ? Math.min(0.35, baseOpacity) : baseOpacity; // [MXAIR2026-ROLL]
         updateMarkerIcon(markerData.marker, color, markerOpacity, stale); // [MXAIR2026-ROLL]
-        markerData.vector.setStyle({ color, opacity: stale ? 0.25 : (status === 'handoff' ? 0.3 : 0.7) }); // [MXAIR2026-ROLL]
+        markerData.vector.setStyle({ color, opacity: stale ? 0.25 : (status === 'released' ? 0.3 : 0.7) }); // [MXAIR2026-ROLL]
         if (markerData.track) { // [MXAIR2026-ROLL]
-            markerData.track.setStyle({ color, opacity: stale ? 0.2 : (status === 'handoff' ? 0.3 : 0.7) }); // [MXAIR2026-ROLL]
+            markerData.track.setStyle({ color, opacity: stale ? 0.2 : (status === 'released' ? 0.3 : 0.7) }); // [MXAIR2026-ROLL]
         } // [MXAIR2026-ROLL]
         updateTooltipClass(markerData.marker, ac); // [MXAIR2026-ROLL]
-        updateCalloutLine(markerData, ac, status); // [MXAIR2026-ROLL]
     } // [MXAIR2026-ROLL]
 
     function bindLabelNoteEditor(marker, flightId) {
@@ -2842,7 +2563,7 @@ if (is_dir($geojsonDir)) {
         const predictedDistance = leaderDistanceNm(ac);
         const predicted = destinationPoint(ac.lat, ac.lon, ac.track || 0, predictedDistance);
         const status = getFlightStatus(id);
-        const color = flightColor(status, ac); // [MXAIR2026-ROLL]
+        const color = flightColor(status);
         const showTrail = settings.tracks && settings.tracks.show_trail;
         if (existing) {
             existing.lastUpdate = Date.now();
@@ -2855,7 +2576,7 @@ if (is_dir($geojsonDir)) {
                 tooltip.options.direction = placement.direction;
                 tooltip.options.offset = placement.offset;
             }
-            existing.vector.setStyle({ color, opacity: status === 'handoff' ? 0.3 : 0.7 }); // [MXAIR2026-ROLL]
+            existing.vector.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
             setTooltipOpacity(existing.marker, shouldShowLabel(ac) ? 1 : 0);
             const history = updateTrackHistory(existing, ac, showTrail);
             if (showTrail) {
@@ -2863,20 +2584,19 @@ if (is_dir($geojsonDir)) {
                     existing.track = L.polyline(history.map(pt => [pt.lat, pt.lon]), {
                         color,
                         weight: 1.0,
-                    opacity: status === 'handoff' ? 0.3 : 0.7, // [MXAIR2026-ROLL]
+                        opacity: status === 'released' ? 0.3 : 0.7,
                         renderer: trackRenderer,
                         pane: 'tracks',
                     }).addTo(map);
                 } else {
                     existing.track.setLatLngs(history.map(pt => [pt.lat, pt.lon]));
-                    existing.track.setStyle({ color, opacity: status === 'handoff' ? 0.3 : 0.7 }); // [MXAIR2026-ROLL]
+                    existing.track.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
                 }
             } else if (existing.track) {
                 map.removeLayer(existing.track);
                 existing.track = null;
             }
-            updateTooltipClass(existing.marker, ac); // [MXAIR2026-ROLL]
-            updateCalloutLine(existing, ac, status); // [MXAIR2026-ROLL]
+            updateTooltipClass(existing.marker, ac);
             bindLabelNoteEditor(existing.marker, id);
             applyStaleState(id, Date.now()); // [MXAIR2026-ROLL]
         } else {
@@ -2887,7 +2607,7 @@ if (is_dir($geojsonDir)) {
             const vector = L.polyline([pos, predicted], {
                 color,
                 weight: 1.0,
-                opacity: status === 'handoff' ? 0.3 : 0.7, // [MXAIR2026-ROLL]
+                opacity: status === 'released' ? 0.3 : 0.7,
                 dashArray: '4 4',
                 renderer: targetRenderer,
                 pane: 'targets',
@@ -2897,7 +2617,7 @@ if (is_dir($geojsonDir)) {
                 ? L.polyline(history.map(pt => [pt.lat, pt.lon]), {
                     color,
                     weight: 1.0,
-                    opacity: status === 'handoff' ? 0.3 : 0.7, // [MXAIR2026-ROLL]
+                    opacity: status === 'released' ? 0.3 : 0.7,
                     renderer: trackRenderer,
                     pane: 'tracks',
                 }).addTo(map)
@@ -2916,12 +2636,11 @@ if (is_dir($geojsonDir)) {
                 handleBrlSelection(flights[id]);
                 selectFlight(id);
             });
-            marker.on('tooltipopen', () => { // [MXAIR2026-ROLL]
-                bindLabelNoteEditor(marker, id); // [MXAIR2026-ROLL]
-                updateTooltipClass(marker, ac); // [MXAIR2026-ROLL]
-                updateCalloutLine(flightMarkers[id], ac, status); // [MXAIR2026-ROLL]
+            marker.on('tooltipopen', () => {
+                bindLabelNoteEditor(marker, id);
+                updateTooltipClass(marker, ac);
             });
-            flightMarkers[id] = { marker, vector, track, history, lastUpdate: Date.now(), callout: null }; // [MXAIR2026-ROLL]
+            flightMarkers[id] = { marker, vector, track, history, lastUpdate: Date.now() }; // [MXAIR2026-ROLL]
             applyStaleState(id, Date.now()); // [MXAIR2026-ROLL]
         }
         updateDebugInfo();
@@ -2963,7 +2682,6 @@ if (is_dir($geojsonDir)) {
             const visible = shouldShowLabel(ac);
             setTooltipOpacity(flightMarkers[id].marker, visible ? 1 : 0);
             updateTooltipClass(flightMarkers[id].marker, ac);
-            updateCalloutLine(flightMarkers[id], ac, getFlightStatus(id)); // [MXAIR2026-ROLL]
         });
     }
 
@@ -2974,9 +2692,6 @@ if (is_dir($geojsonDir)) {
             map.removeLayer(state.vector);
             if (state.track) {
                 map.removeLayer(state.track);
-            }
-            if (state.callout) { // [MXAIR2026-ROLL]
-                map.removeLayer(state.callout); // [MXAIR2026-ROLL]
             }
             delete flightMarkers[id];
         }
@@ -3032,7 +2747,7 @@ if (is_dir($geojsonDir)) {
         const dest = ac.destination || ac.dest || '';
         const eta = ac.eta || '';
         const note = ac.note || stripNotes[flightId] || '';
-        const statusLabel = statusLabels[status] || statusLabels.announced; // [MXAIR2026-ROLL]
+        const statusLabel = status === 'assumed' ? 'ASUMIDA' : status === 'released' ? 'LIBERADA' : 'PENDIENTE';
         const routeSummary = ac.routeSummary || (origin || dest ? `${origin || '---'} → ${dest || '---'}` : 'Sin ruta disponible');
         const detailsPrimary = `
             <span>ALT ${alt}</span>
@@ -3113,9 +2828,9 @@ if (is_dir($geojsonDir)) {
                 stripTray.appendChild(strip);
             }
             const status = getFlightStatus(flightId);
-            strip.classList.toggle('assumed', status === 'assumed'); // [MXAIR2026-ROLL]
-            strip.classList.toggle('handoff', status === 'handoff'); // [MXAIR2026-ROLL]
-            strip.classList.toggle('announced', status === 'announced'); // [MXAIR2026-ROLL]
+            strip.classList.toggle('assumed', status === 'assumed');
+            strip.classList.toggle('released', status === 'released');
+            strip.classList.toggle('pending', status === 'normal');
             strip.classList.toggle('selected', selectedFlight === flightId || selectedStrip === flightId);
             try { // [MXAIR2026-ROLL]
                 strip.innerHTML = buildStripHtml(ac, status); // [MXAIR2026-ROLL]
@@ -3136,10 +2851,11 @@ if (is_dir($geojsonDir)) {
                     scrollStripIntoView(flightId); // [MXAIR2026]
                 }); // [MXAIR2026]
             });
-            const emergency = emergencyCode(ac); // [MXAIR2026-ROLL]
-            strip.classList.toggle('emergency-7700', emergency === '7700'); // [MXAIR2026-ROLL]
-            strip.classList.toggle('emergency-7600', emergency === '7600'); // [MXAIR2026-ROLL]
-            strip.classList.toggle('emergency-7500', emergency === '7500'); // [MXAIR2026-ROLL]
+            if (['7500','7600','7700'].includes(ac.squawk)) {
+                strip.style.background = '#8a0e0e';
+            } else {
+                strip.style.background = '';
+            }
             stripTray.appendChild(strip);
         });
         if (selectedStrip) {
@@ -3162,11 +2878,10 @@ if (is_dir($geojsonDir)) {
         Object.keys(flightMarkers).forEach(id => {
             const m = flightMarkers[id].marker; // [MXAIR2026-ROLL]
             const status = getFlightStatus(id); // [MXAIR2026-ROLL]
-            const color = id === flightId ? '#22d3ee' : flightColor(status, flights[id]); // [MXAIR2026-ROLL]
+            const color = id === flightId ? '#22d3ee' : flightColor(status); // [MXAIR2026-ROLL]
             const stale = flights[id]?.is_stale === true; // [MXAIR2026-ROLL]
-            updateMarkerIcon(m, color, status === 'handoff' ? 0.6 : 1, stale); // [MXAIR2026-ROLL]
+            updateMarkerIcon(m, color, status === 'released' ? 0.6 : 1, stale); // [MXAIR2026-ROLL]
             updateTooltipClass(m, flights[id] || {}); // [MXAIR2026-ROLL]
-            updateCalloutLine(flightMarkers[id], flights[id] || {}, status); // [MXAIR2026-ROLL]
         });
         updateStrips();
         scrollStripIntoView(flightId); // [MXAIR2026]
@@ -3175,7 +2890,7 @@ if (is_dir($geojsonDir)) {
         const status = getFlightStatus(flightId);
         let html = '';
         html += '<strong>CALLSIGN:</strong> ' + (ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || flightId)) + '<br>';
-        html += '<strong>STATUS:</strong> ' + (statusLabels[status] || status.toUpperCase()) + '<br>'; // [MXAIR2026-ROLL]
+        html += '<strong>STATUS:</strong> ' + status.toUpperCase() + '<br>';
         html += '<strong>POS:</strong> ' + ac.lat.toFixed(4) + ', ' + ac.lon.toFixed(4) + '<br>';
         if (ac.alt) html += '<strong>ALT:</strong> ' + ac.alt + ' FT<br>';
         if (ac.gs) html += '<strong>GS:</strong> ' + ac.gs + ' KT<br>';
@@ -3194,16 +2909,16 @@ if (is_dir($geojsonDir)) {
         if (ac.emergency && ac.emergency !== 'none') html += '<strong>EMERG:</strong> ' + ac.emergency + '<br>';
         if (ac.routeSummary) html += '<strong>ROUTE SUMMARY:</strong> ' + ac.routeSummary + '<br>';
         html += '<label>Note / OPMET:<br><textarea id="noteField" rows="2" style="width:95%;">' + (ac.note || '') + '</textarea></label><br>';
-        html += '<button id="assumeBtn">Assume</button> ' + // [MXAIR2026-ROLL]
-                '<button id="handoffBtn">Hand-Off</button> ' + // [MXAIR2026-ROLL]
+        html += '<button id="assumeBtn">Assume</button> ' +
+                '<button id="releaseBtn">Release</button> ' +
                 '<button id="saveNoteBtn">Save Note</button>';
         flightInfoDiv.innerHTML = html;
         // Bind buttons
         document.getElementById('assumeBtn').addEventListener('click', () => {
             assumeFlight(flightId);
         });
-        document.getElementById('handoffBtn').addEventListener('click', () => { // [MXAIR2026-ROLL]
-            releaseFlight(flightId); // [MXAIR2026-ROLL]
+        document.getElementById('releaseBtn').addEventListener('click', () => {
+            releaseFlight(flightId);
         });
         document.getElementById('saveNoteBtn').addEventListener('click', () => {
             const text = document.getElementById('noteField').value.trim();
@@ -3228,19 +2943,18 @@ if (is_dir($geojsonDir)) {
         stripOrder = [flightId, ...stripOrder.filter(item => item !== flightId)]; // [MXAIR2026]
         const markerData = flightMarkers[flightId];
         if (markerData) { // [MXAIR2026-ROLL]
-            const color = flightColor('assumed', flights[flightId]); // [MXAIR2026-ROLL]
+            const color = flightColor('assumed'); // [MXAIR2026-ROLL]
             const stale = flights[flightId]?.is_stale === true; // [MXAIR2026-ROLL]
             updateMarkerIcon(markerData.marker, color, stale ? 0.35 : 1, stale); // [MXAIR2026-ROLL]
             markerData.vector.setStyle({ color }); // [MXAIR2026-ROLL]
             if (markerData.track) { // [MXAIR2026-ROLL]
                 markerData.track.setStyle({ color }); // [MXAIR2026-ROLL]
             } // [MXAIR2026-ROLL]
-            updateCalloutLine(markerData, flights[flightId], 'assumed'); // [MXAIR2026-ROLL]
         } // [MXAIR2026-ROLL]
         const strip = document.querySelector('.strip[data-flight-id="' + flightId + '"]');
         if (strip) {
             strip.classList.add('assumed');
-            strip.classList.remove('handoff'); // [MXAIR2026-ROLL]
+            strip.classList.remove('released');
         }
         updateStrips();
         persistStripOrder(stripOrder); // [MXAIR2026]
@@ -3254,25 +2968,24 @@ if (is_dir($geojsonDir)) {
         }
     }
 
-    // Hand-off a flight (mark as handoff) // [MXAIR2026-ROLL]
+    // Release a flight (mark as released)
     function releaseFlight(flightId) {
-        flightStates[flightId] = 'handoff'; // [MXAIR2026-ROLL]
-        stripStatuses[flightId] = 'handoff'; // [MXAIR2026-ROLL]
+        flightStates[flightId] = 'released';
+        stripStatuses[flightId] = 'released';
         const markerData = flightMarkers[flightId];
         if (markerData) { // [MXAIR2026-ROLL]
-            const color = flightColor('handoff', flights[flightId]); // [MXAIR2026-ROLL]
+            const color = flightColor('released'); // [MXAIR2026-ROLL]
             const stale = flights[flightId]?.is_stale === true; // [MXAIR2026-ROLL]
             updateMarkerIcon(markerData.marker, color, stale ? 0.35 : 0.6, stale); // [MXAIR2026-ROLL]
             markerData.vector.setStyle({ color, opacity: 0.3 }); // [MXAIR2026-ROLL]
             if (markerData.track) { // [MXAIR2026-ROLL]
                 markerData.track.setStyle({ color, opacity: 0.3 }); // [MXAIR2026-ROLL]
             } // [MXAIR2026-ROLL]
-            updateCalloutLine(markerData, flights[flightId], 'handoff'); // [MXAIR2026-ROLL]
         } // [MXAIR2026-ROLL]
         const strip = document.querySelector('.strip[data-flight-id="' + flightId + '"]');
         if (strip) {
             strip.classList.remove('assumed');
-            strip.classList.add('handoff'); // [MXAIR2026-ROLL]
+            strip.classList.add('released');
         }
         updateStrips();
         updateLabelVisibility();
@@ -3281,7 +2994,7 @@ if (is_dir($geojsonDir)) {
         }
         const hex = flights[flightId]?.hex;
         if (hex) {
-            persistStrip({ hex, status: 'handoff', note: flights[flightId]?.note || stripNotes[flightId] || '' }); // [MXAIR2026-ROLL]
+            persistStrip({ hex, status: 'released', note: flights[flightId]?.note || stripNotes[flightId] || '' });
         }
     }
 
