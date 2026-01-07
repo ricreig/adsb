@@ -569,6 +569,37 @@ if (is_dir($geojsonDir)) {
                 </label>
             </div>
             <div class="settings-section">
+                <strong>Tracks &amp; Leading Line</strong>
+                <label style="display:block;margin-bottom:4px;">
+                    <input type="checkbox" id="showTrail"/>
+                    Show Track Trail
+                </label>
+                <label style="display:block;margin-bottom:4px;">Leading Line Mode
+                    <select id="leaderMode" style="margin-left:4px;">
+                        <option value="time">Time (minutes)</option>
+                        <option value="distance">Distance (NM)</option>
+                    </select>
+                </label>
+                <label style="display:block;margin-bottom:4px;" id="leaderTimeLabel">Leading Time
+                    <select id="leaderTime" style="margin-left:4px;">
+                        <option value="1">1 min</option>
+                        <option value="2">2 min</option>
+                        <option value="3">3 min</option>
+                        <option value="4">4 min</option>
+                        <option value="5">5 min</option>
+                    </select>
+                </label>
+                <label style="display:block;margin-bottom:4px;" id="leaderDistanceLabel">Leading Distance
+                    <select id="leaderDistance" style="margin-left:4px;">
+                        <option value="1">1 NM</option>
+                        <option value="2">2 NM</option>
+                        <option value="5">5 NM</option>
+                        <option value="10">10 NM</option>
+                        <option value="20">20 NM</option>
+                    </select>
+                </label>
+            </div>
+            <div class="settings-section">
                 <strong>Category Styles (future)</strong>
                 <div style="font-size:12px;color:#9fb3c8;margin-top:4px;">
                     Placeholder for per-layer styling defaults (loaded/saved with settings).
@@ -725,6 +756,14 @@ if (is_dir($geojsonDir)) {
             zone: 'all',
             max_points: 2000,
         },
+        tracks: {
+            show_trail: false,
+        },
+        leader: {
+            mode: 'time',
+            time_minutes: 2,
+            distance_nm: 2,
+        },
         category_styles: {
             default: {
                 color: '#3aa0ff',
@@ -735,8 +774,8 @@ if (is_dir($geojsonDir)) {
     };
 
     const expectedFeedCenter = {
-        lat: 29.8839810,
-        lon: -114.0747826,
+        lat: 29.0099590,
+        lon: -114.5552580,
         radius_nm: 250,
     };
 
@@ -757,6 +796,8 @@ if (is_dir($geojsonDir)) {
         }
         const uiSource = input && input.ui_center ? input.ui_center : (input && input.display_center ? input.display_center : {});
         merged.ui_center = { ...defaultSettings.ui_center, ...uiSource };
+        merged.tracks = { ...defaultSettings.tracks, ...(input && input.tracks ? input.tracks : {}) };
+        merged.leader = { ...defaultSettings.leader, ...(input && input.leader ? input.leader : {}) };
         return merged;
     }
 
@@ -1599,6 +1640,22 @@ if (is_dir($geojsonDir)) {
     // Range ring overlay container
     let rangeRings = [];
 
+    function syncLeaderControls(mode) {
+        const normalizedMode = mode === 'distance' ? 'distance' : 'time';
+        const timeLabel = document.getElementById('leaderTimeLabel');
+        const distanceLabel = document.getElementById('leaderDistanceLabel');
+        const timeSelect = document.getElementById('leaderTime');
+        const distanceSelect = document.getElementById('leaderDistance');
+        if (!timeLabel || !distanceLabel || !timeSelect || !distanceSelect) {
+            return;
+        }
+        const timeActive = normalizedMode === 'time';
+        timeLabel.style.opacity = timeActive ? '1' : '0.5';
+        distanceLabel.style.opacity = timeActive ? '0.5' : '1';
+        timeSelect.disabled = !timeActive;
+        distanceSelect.disabled = timeActive;
+    }
+
     // Apply settings to map and UI
     function applySettings() {
         ensureCenters();
@@ -1612,6 +1669,16 @@ if (is_dir($geojsonDir)) {
         if (typeof navpointsToggle !== 'undefined') {
             navpointsToggle.checked = settings.navpoints.enabled;
         }
+        if (!settings.tracks.show_trail) {
+            Object.values(flightMarkers).forEach((markerData) => {
+                if (markerData.track) {
+                    map.removeLayer(markerData.track);
+                    markerData.track = null;
+                }
+                markerData.history = [];
+            });
+        }
+        syncLeaderControls(settings.leader && settings.leader.mode);
     }
 
     // Create or refresh range rings around the primary airport
@@ -2214,7 +2281,11 @@ if (is_dir($geojsonDir)) {
         });
     }
 
-    function updateTrackHistory(state, ac) {
+    function updateTrackHistory(state, ac, enabled) {
+        if (!enabled) {
+            state.history = [];
+            return state.history;
+        }
         const now = Date.now();
         if (!state.history) {
             state.history = [];
@@ -2239,6 +2310,15 @@ if (is_dir($geojsonDir)) {
         return state.history;
     }
 
+    function leaderDistanceNm(ac) {
+        const leader = settings.leader || defaultSettings.leader;
+        if (leader.mode === 'distance') {
+            return leader.distance_nm || defaultSettings.leader.distance_nm;
+        }
+        const minutes = leader.time_minutes || defaultSettings.leader.time_minutes;
+        return (ac.gs || 0) * (minutes / 60);
+    }
+
     function renderFlight(ac) {
         const id = ac._id;
         if (!id) {
@@ -2246,11 +2326,11 @@ if (is_dir($geojsonDir)) {
         }
         const existing = flightMarkers[id];
         const pos = [ac.lat, ac.lon];
-        const vectorLengthNm = 2; // minutes ahead – 2 minutes for short leader
-        const predictedDistance = (ac.gs || 0) * (vectorLengthNm / 60);
-        const predicted = destinationPoint(ac.lat, ac.lon, ac.track, predictedDistance);
+        const predictedDistance = leaderDistanceNm(ac);
+        const predicted = destinationPoint(ac.lat, ac.lon, ac.track || 0, predictedDistance);
         const status = getFlightStatus(id);
         const color = flightColor(status);
+        const showTrail = settings.tracks && settings.tracks.show_trail;
         if (existing) {
             existing.lastUpdate = Date.now();
             existing.marker.setLatLng(pos);
@@ -2265,10 +2345,23 @@ if (is_dir($geojsonDir)) {
             updateMarkerIcon(existing.marker, color, status === 'released' ? 0.6 : 1);
             existing.vector.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
             setTooltipOpacity(existing.marker, shouldShowLabel(ac) ? 1 : 0);
-            const history = updateTrackHistory(existing, ac);
-            if (existing.track) {
-                existing.track.setLatLngs(history.map(pt => [pt.lat, pt.lon]));
-                existing.track.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
+            const history = updateTrackHistory(existing, ac, showTrail);
+            if (showTrail) {
+                if (!existing.track) {
+                    existing.track = L.polyline(history.map(pt => [pt.lat, pt.lon]), {
+                        color,
+                        weight: 1.0,
+                        opacity: status === 'released' ? 0.3 : 0.7,
+                        renderer: trackRenderer,
+                        pane: 'tracks',
+                    }).addTo(map);
+                } else {
+                    existing.track.setLatLngs(history.map(pt => [pt.lat, pt.lon]));
+                    existing.track.setStyle({ color, opacity: status === 'released' ? 0.3 : 0.7 });
+                }
+            } else if (existing.track) {
+                map.removeLayer(existing.track);
+                existing.track = null;
             }
             updateTooltipClass(existing.marker, ac);
             bindLabelNoteEditor(existing.marker, id);
@@ -2285,14 +2378,16 @@ if (is_dir($geojsonDir)) {
                 renderer: targetRenderer,
                 pane: 'targets',
             }).addTo(map);
-            const history = updateTrackHistory({ history: [] }, ac);
-            const track = L.polyline(history.map(pt => [pt.lat, pt.lon]), {
-                color,
-                weight: 1.0,
-                opacity: status === 'released' ? 0.3 : 0.7,
-                renderer: trackRenderer,
-                pane: 'tracks',
-            }).addTo(map);
+            const history = updateTrackHistory({ history: [] }, ac, showTrail);
+            const track = showTrail
+                ? L.polyline(history.map(pt => [pt.lat, pt.lon]), {
+                    color,
+                    weight: 1.0,
+                    opacity: status === 'released' ? 0.3 : 0.7,
+                    renderer: trackRenderer,
+                    pane: 'tracks',
+                }).addTo(map)
+                : null;
             const placement = labelPlacement(ac);
             marker.bindTooltip(labelFromAc(ac), {
                 offset: placement.offset,
@@ -3138,6 +3233,11 @@ if (is_dir($geojsonDir)) {
         document.getElementById('navpointsMinZoom').value = settings.navpoints.min_zoom;
         document.getElementById('navpointsZone').value = settings.navpoints.zone;
         document.getElementById('navpointsMax').value = settings.navpoints.max_points;
+        document.getElementById('showTrail').checked = settings.tracks.show_trail;
+        document.getElementById('leaderMode').value = settings.leader.mode || 'time';
+        document.getElementById('leaderTime').value = settings.leader.time_minutes || 2;
+        document.getElementById('leaderDistance').value = settings.leader.distance_nm || 2;
+        syncLeaderControls(settings.leader && settings.leader.mode);
         updateAiracUi();
     });
     // Apply settings on button click
@@ -3167,7 +3267,15 @@ if (is_dir($geojsonDir)) {
         settings.navpoints.min_zoom = parseInt(document.getElementById('navpointsMinZoom').value, 10) || settings.navpoints.min_zoom;
         settings.navpoints.zone = document.getElementById('navpointsZone').value;
         settings.navpoints.max_points = parseInt(document.getElementById('navpointsMax').value, 10) || settings.navpoints.max_points;
+        settings.tracks.show_trail = document.getElementById('showTrail').checked;
+        settings.leader.mode = document.getElementById('leaderMode').value;
+        settings.leader.time_minutes = parseInt(document.getElementById('leaderTime').value, 10) || settings.leader.time_minutes;
+        settings.leader.distance_nm = parseInt(document.getElementById('leaderDistance').value, 10) || settings.leader.distance_nm;
         saveSettings();
+    });
+
+    document.getElementById('leaderMode').addEventListener('change', (event) => {
+        syncLeaderControls(event.target.value);
     });
 
     function saveSettings() {

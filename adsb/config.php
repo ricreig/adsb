@@ -13,8 +13,8 @@ $config = [
     ],
     // Fixed ADS-B feed center for ACC MMZT coverage (do not change).
     'feed_center' => [
-        'lat' => 29.8839810,
-        'lon' => -114.0747826,
+        'lat' => 29.0099590,
+        'lon' => -114.5552580,
     ],
     // Fixed ADS-B feed radius (nautical miles).
     'feed_radius_nm' => 250,
