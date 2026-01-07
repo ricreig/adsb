@@ -3333,16 +3333,21 @@ if (is_dir($geojsonDir)) {
                 const hasUpstream = data.upstream_http !== null && data.upstream_http !== undefined;
                 const upstreamBad = hasUpstream && Number(data.upstream_http) >= 400;
                 const hasError = data.error !== null && data.error !== undefined && data.error !== '';
-                const cacheStale = data.cache_stale === true;
-                let feedStatus = 'OK';
-                if (cacheStale) {
-                    feedStatus = 'DEGRADED';
-                } else if (hasError || upstreamBad) {
-                    feedStatus = 'ERROR';
-                }
-                const warningMessage = feedStatus === 'OK'
-                    ? ''
-                    : (cacheStale ? 'Feed cache stale.' : (hasError ? data.error : `Upstream HTTP ${data.upstream_http}`));
+                const cacheStale = data.cache_stale === true; // [MXAIR2026-ROLL]
+                const hasAircraft = Array.isArray(data.ac) && data.ac.length > 0; // [MXAIR2026-ROLL]
+                const ageMs = Number.isFinite(data.age_ms) ? data.age_ms : null; // [MXAIR2026-ROLL]
+                const cacheMaxStaleMs = Number.isFinite(data.cache_max_stale_ms) ? data.cache_max_stale_ms : null; // [MXAIR2026-ROLL]
+                const staleThresholdMs = cacheMaxStaleMs !== null ? cacheMaxStaleMs + 500 : null; // [MXAIR2026-ROLL]
+                const aggregateExpired = !hasAircraft && ageMs !== null && staleThresholdMs !== null && ageMs > staleThresholdMs; // [MXAIR2026-ROLL]
+                let feedStatus = 'OK'; // [MXAIR2026-ROLL]
+                if (!data.ok || aggregateExpired) { // [MXAIR2026-ROLL]
+                    feedStatus = 'ERROR'; // [MXAIR2026-ROLL]
+                } else if (cacheStale || hasError || upstreamBad) { // [MXAIR2026-ROLL]
+                    feedStatus = 'DEGRADED'; // [MXAIR2026-ROLL]
+                } // [MXAIR2026-ROLL]
+                const warningMessage = feedStatus === 'OK' // [MXAIR2026-ROLL]
+                    ? '' // [MXAIR2026-ROLL]
+                    : (aggregateExpired ? 'Feed cache stale.' : (hasError ? data.error : (upstreamBad ? `Upstream HTTP ${data.upstream_http}` : 'Feed degraded.'))); // [MXAIR2026-ROLL]
                 updateFeedStatus(feedStatus, warningMessage);
                 if (feedStatus !== 'OK') {
                     setFeedError(warningMessage || 'Feed degraded', warningMessage);
@@ -3366,9 +3371,6 @@ if (is_dir($geojsonDir)) {
                             ac.lat = lat; // [MXAIR2026-ROLL]
                             ac.lon = lon; // [MXAIR2026-ROLL]
                             const seenPos = coerceNumber(ac.seen_pos); // [MXAIR2026-ROLL]
-                            if (seenPos !== null && seenPos * 1000 > targetTtlMs) { // [MXAIR2026-ROLL]
-                                return; // [MXAIR2026-ROLL]
-                            }
                             const lastSeenMs = Number.isFinite(ac.last_seen_ms) // [MXAIR2026-ROLL]
                                 ? ac.last_seen_ms // [MXAIR2026-ROLL]
                                 : (seenPos !== null ? observedAt - (seenPos * 1000) : now); // [MXAIR2026-ROLL]
