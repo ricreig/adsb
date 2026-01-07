@@ -11,13 +11,20 @@ $config = [
         'lat' => 29.8839810,
         'lon' => -114.0747826,
     ],
-    // Fixed ADS-B feed center for ACC MMZT coverage (do not change).
-    'feed_center' => [
-        'lat' => 29.0099590,
-        'lon' => -114.5552580,
+    // Fixed ADS-B feed center for legacy coverage (do not change).
+    'feed_center' => [ // [MXAIR2026]
+        'lat' => 29.0099590, // [MXAIR2026]
+        'lon' => -114.5552580, // [MXAIR2026]
     ],
     // Fixed ADS-B feed radius (nautical miles).
     'feed_radius_nm' => 250,
+    // National feed centers to cover all Mexico (lat/lon/radius_nm). // [MXAIR2026]
+    'feed_centers' => [ // [MXAIR2026]
+        [ 'name' => 'Mazatlán', 'lat' => 23.2167, 'lon' => -106.4167, 'radius_nm' => 250 ], // [MXAIR2026]
+        [ 'name' => 'Monterrey', 'lat' => 25.6866, 'lon' => -100.3161, 'radius_nm' => 250 ], // [MXAIR2026]
+        [ 'name' => 'Ciudad de México', 'lat' => 19.4326, 'lon' => -99.1332, 'radius_nm' => 250 ], // [MXAIR2026]
+        [ 'name' => 'Mérida', 'lat' => 20.9674, 'lon' => -89.5926, 'radius_nm' => 250 ], // [MXAIR2026]
+    ],
     // UI center (range rings + BRL/distance calculations) defaults to MMTJ.
     'ui_center' => [
         'lat' => 32.541,
@@ -56,9 +63,9 @@ $config = [
     // Legacy ADS-B radius (deprecated: use feed_radius_nm).
     'adsb_radius' => 250,
     // Feed cache TTL (milliseconds) and upstream rate limit (seconds).
-    'feed_cache_ttl_ms' => 1500,
+    'feed_cache_ttl_ms' => 2500, // [MXAIR2026]
     // Maximum staleness allowed when serving cached data during rate limiting (milliseconds).
-    'feed_cache_max_stale_ms' => 5000,
+    'feed_cache_max_stale_ms' => 8000, // [MXAIR2026]
     'feed_rate_limit_s' => 1.0,
     // Cache directory for feed responses and upstream rate limiting.
     'feed_cache_dir' => __DIR__ . '/data/cache',
@@ -94,7 +101,7 @@ $config = [
     // Settings persistence (SQLite).
     'settings_db' => __DIR__ . '/data/adsb.sqlite',
     // Polling interval for the frontend (milliseconds).
-    'poll_interval_ms' => 1500,
+    'poll_interval_ms' => 2000, // [MXAIR2026]
     // Client TTL for stale targets (seconds).
     'target_ttl_s' => 120,
     // Track history defaults.
