@@ -146,7 +146,7 @@ function parseCoordinatePair(string $pair): ?array
             $lat = parseCoordinate($latToken);
             $lon = parseCoordinate($lonToken);
             if ($lat !== null && $lon !== null) {
-                return [$lon, $lat];
+                return ensureLonLatPair($lat, $lon); // [MXAIR2026-ROLL]
             }
         }
     }
@@ -157,7 +157,7 @@ function parseCoordinatePair(string $pair): ?array
         if ($lat === null || $lon === null) {
             return null;
         }
-        return [$lon, $lat];
+        return ensureLonLatPair($lat, $lon); // [MXAIR2026-ROLL]
     }
 
     if (preg_match('/^([+-]?\d+(?:\.\d+)?)([NS])[,\s]+([+-]?\d+(?:\.\d+)?)([EW])$/i', $pair, $m)) {
@@ -166,7 +166,7 @@ function parseCoordinatePair(string $pair): ?array
         if ($lat === null || $lon === null) {
             return null;
         }
-        return [$lon, $lat];
+        return ensureLonLatPair($lat, $lon); // [MXAIR2026-ROLL]
     }
 
     if (preg_match('/^([+-]?\d+(?:\.\d+)?)[,\s]+([+-]?\d+(?:\.\d+)?)$/', $pair, $m)) {
@@ -175,10 +175,21 @@ function parseCoordinatePair(string $pair): ?array
         if ($lat === null || $lon === null) {
             return null;
         }
-        return [$lon, $lat];
+        return ensureLonLatPair($lat, $lon); // [MXAIR2026-ROLL]
     }
 
     return null;
+}
+
+function ensureLonLatPair(float $lat, float $lon): ?array
+{ // [MXAIR2026-ROLL]
+    if (isValidLatValue($lat) && isValidLonValue($lon)) { // [MXAIR2026-ROLL]
+        return [$lon, $lat]; // [MXAIR2026-ROLL]
+    }
+    if (isValidLatValue($lon) && isValidLonValue($lat)) { // [MXAIR2026-ROLL]
+        return [$lat, $lon]; // [MXAIR2026-ROLL]
+    }
+    return null; // [MXAIR2026-ROLL]
 }
 
 function parseRestrictedAreas(SimpleXMLElement $xml): array

@@ -100,7 +100,7 @@ $config = [
 
     // Toggle filtering based on the Mexico border GeoJSON. Keep disabled to
     // show all traffic.
-    'mex_border_filter_enabled' => false,
+    'mex_border_filter_enabled' => true, // [MXAIR2026-ROLL]
     // Buffer outside Mexico (nautical miles) to keep when using
     // data/mex-border.geojson.
     'mex_border_buffer_nm' => 10,

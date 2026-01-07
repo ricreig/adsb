@@ -2236,7 +2236,8 @@ if (is_dir($geojsonDir)) {
         const status = getFlightStatus(flightId);
         const note = ac.note || stripNotes[flightId] || '';
         const callsign = ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || flightId);
-        const reg = ac.reg ? ac.reg.trim().toUpperCase() : ''; // [MXAIR2026-ROLL]
+        const registration = (ac.reg || ac.registration || '').toString().trim().toUpperCase(); // [MXAIR2026-ROLL]
+        const registrationLabel = registration || ac.hex || (ac.flight ? ac.flight.trim().toUpperCase() : ''); // [MXAIR2026-ROLL]
         const alt = ac.alt ? `${ac.alt}FT` : '---';
         const gs = ac.gs ? `${ac.gs}KT` : '---';
         const trk = ac.track ? `${ac.track}°` : '---';
@@ -2247,6 +2248,7 @@ if (is_dir($geojsonDir)) {
         popup.dataset.flightId = flightId; // [MXAIR2026]
         popup.innerHTML = `
             <strong>${escapeHtml(callsign)}</strong><br>
+            Matrícula: ${escapeHtml(registrationLabel || '---')}<br> <!-- // [MXAIR2026-ROLL] -->
             Estado: ${escapeHtml(status.toUpperCase())}<br>
             ALT ${escapeHtml(alt)} · GS ${escapeHtml(gs)} · TRK ${escapeHtml(trk)}<br>
             TYPE ${escapeHtml(type)} · RUTA ${escapeHtml(route)}<br>
@@ -3305,33 +3307,43 @@ if (is_dir($geojsonDir)) {
                     const observedAt = Number.isFinite(data.generated_at_ms) ? data.generated_at_ms : now; // [MXAIR2026-ROLL]
                     const missingGraceMs = Math.max(targetTtlMs, (settings.poll_interval_ms || 1500) * 6); // [MXAIR2026-ROLL]
                     (data.ac || []).forEach(ac => { // [MXAIR2026-ROLL]
-                        if (!ac) { // [MXAIR2026-ROLL]
-                            return; // [MXAIR2026-ROLL]
-                        }
-                        const lat = coerceNumber(ac.lat); // [MXAIR2026-ROLL]
-                        const lon = coerceNumber(ac.lon); // [MXAIR2026-ROLL]
-                        if (lat === null || lon === null || !isValidLat(lat) || !isValidLon(lon)) { // [MXAIR2026-ROLL]
-                            return; // [MXAIR2026-ROLL]
-                        }
-                        ac.lat = lat; // [MXAIR2026-ROLL]
-                        ac.lon = lon; // [MXAIR2026-ROLL]
-                        const seenPos = coerceNumber(ac.seen_pos); // [MXAIR2026-ROLL]
-                        if (seenPos !== null && seenPos * 1000 > targetTtlMs) { // [MXAIR2026-ROLL]
-                            return; // [MXAIR2026-ROLL]
-                        }
-                        ac.hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid) || null; // [MXAIR2026-ROLL]
-                        const flightId = buildAircraftId(ac); // [MXAIR2026-ROLL]
-                        if (!flightId) { // [MXAIR2026-ROLL]
-                            return; // [MXAIR2026-ROLL]
-                        }
-                        ac._id = flightId; // [MXAIR2026-ROLL]
-                        seenIds.add(flightId); // [MXAIR2026-ROLL]
-                        const previous = flights[flightId] || {}; // [MXAIR2026-ROLL]
-                        const note = previous.note || noteStore[flightId] || stripNotes[flightId] || ac.note || ''; // [MXAIR2026-ROLL]
-                        const lastSeen = seenPos !== null ? observedAt - (seenPos * 1000) : now; // [MXAIR2026-ROLL]
-                        flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: lastSeen }; // [MXAIR2026-ROLL]
-                        renderFlight(flights[flightId]); // [MXAIR2026-ROLL]
-                        stripDataCache[flightId] = flights[flightId]; // [MXAIR2026-ROLL]
+                        try { // [MXAIR2026-ROLL]
+                            if (!ac) { // [MXAIR2026-ROLL]
+                                return; // [MXAIR2026-ROLL]
+                            }
+                            const lat = coerceNumber(ac.lat); // [MXAIR2026-ROLL]
+                            const lon = coerceNumber(ac.lon); // [MXAIR2026-ROLL]
+                            if (lat === null || lon === null || !isValidLat(lat) || !isValidLon(lon)) { // [MXAIR2026-ROLL]
+                                return; // [MXAIR2026-ROLL]
+                            }
+                            ac.lat = lat; // [MXAIR2026-ROLL]
+                            ac.lon = lon; // [MXAIR2026-ROLL]
+                            const seenPos = coerceNumber(ac.seen_pos); // [MXAIR2026-ROLL]
+                            if (seenPos !== null && seenPos * 1000 > targetTtlMs) { // [MXAIR2026-ROLL]
+                                return; // [MXAIR2026-ROLL]
+                            }
+                            ac.hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid) || null; // [MXAIR2026-ROLL]
+                            const flightId = buildAircraftId(ac); // [MXAIR2026-ROLL]
+                            if (!flightId) { // [MXAIR2026-ROLL]
+                                return; // [MXAIR2026-ROLL]
+                            }
+                            ac._id = flightId; // [MXAIR2026-ROLL]
+                            seenIds.add(flightId); // [MXAIR2026-ROLL]
+                            const previous = flights[flightId] || {}; // [MXAIR2026-ROLL]
+                            const note = previous.note || noteStore[flightId] || stripNotes[flightId] || ac.note || ''; // [MXAIR2026-ROLL]
+                            const lastSeen = seenPos !== null ? observedAt - (seenPos * 1000) : now; // [MXAIR2026-ROLL]
+                            flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: lastSeen }; // [MXAIR2026-ROLL]
+                            try { // [MXAIR2026-ROLL]
+                                renderFlight(flights[flightId]); // [MXAIR2026-ROLL]
+                            } catch (renderErr) { // [MXAIR2026-ROLL]
+                                console.error('Aircraft render failed', renderErr); // [MXAIR2026-ROLL]
+                                reportError('Aircraft render failed', renderErr && renderErr.message ? renderErr.message : String(renderErr || 'Unknown')); // [MXAIR2026-ROLL]
+                            } // [MXAIR2026-ROLL]
+                            stripDataCache[flightId] = flights[flightId]; // [MXAIR2026-ROLL]
+                        } catch (err) { // [MXAIR2026-ROLL]
+                            console.error('Aircraft update failed', err); // [MXAIR2026-ROLL]
+                            reportError('Aircraft update failed', err && err.message ? err.message : String(err || 'Unknown')); // [MXAIR2026-ROLL]
+                        } // [MXAIR2026-ROLL]
                     }); // [MXAIR2026-ROLL]
                     Object.keys(flightMarkers).forEach(flightId => { // [MXAIR2026-ROLL]
                         if (!seenIds.has(flightId)) { // [MXAIR2026-ROLL]
