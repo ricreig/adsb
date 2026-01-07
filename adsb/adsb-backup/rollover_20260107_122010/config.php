@@ -8,7 +8,6 @@ $vatmexRepoDefault = is_dir($vatmexBaseDir) ? $vatmexBaseDir : null; // [MXAIR20
 $vatmexAiracDefault = null; // [MXAIR2026-ROLL]
 if ($vatmexRepoDefault !== null) { // [MXAIR2026-ROLL]
     $airacCandidates = [ // [MXAIR2026-ROLL]
-        $vatmexBaseDir . '/vatmex-mmfr-sector-central', // [MXAIR2026-ROLL]
         $vatmexBaseDir . '/airac', // [MXAIR2026-ROLL]
         $vatmexBaseDir . '/AIRAC', // [MXAIR2026-ROLL]
         $vatmexBaseDir . '/data/airac', // [MXAIR2026-ROLL]
@@ -41,7 +40,7 @@ $config = [
         [ 'name' => 'Tijuana', 'lat' => 32.54, 'lon' => -116.95, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
         [ 'name' => 'Mazatlan', 'lat' => 23.2167, 'lon' => -106.4167, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
         [ 'name' => 'Monterrey', 'lat' => 25.6866, 'lon' => -100.3161, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
-        [ 'name' => 'MexicoCity', 'lat' => 19.4326, 'lon' => -99.1332, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
+        [ 'name' => 'Ciudad de Mexico', 'lat' => 19.4326, 'lon' => -99.1332, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
         [ 'name' => 'Merida', 'lat' => 20.9674, 'lon' => -89.5926, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
     ],
     // UI center (range rings + BRL/distance calculations) defaults to MMTJ.
@@ -85,14 +84,8 @@ $config = [
     'feed_cache_ttl_ms' => 2500, // [MXAIR2026]
     // Maximum staleness allowed when serving cached data during rate limiting (milliseconds).
     'feed_cache_max_stale_ms' => 8000, // [MXAIR2026]
-    'upstream_global_min_interval_ms' => 1100, // [MXAIR2026-ROLL]
-    'per_center_min_interval_s' => 8, // [MXAIR2026-ROLL]
-    'rr_centers_per_call' => 1, // [MXAIR2026-ROLL]
-    'store_ttl_s' => 120, // [MXAIR2026-ROLL]
-    'frontend_poll_ms' => 2500, // [MXAIR2026-ROLL]
-    'backoff_429_s' => 30, // [MXAIR2026-ROLL]
     'feed_center_request_spacing_ms' => 1100, // [MXAIR2026-ROLL]
-    'feed_aggregate_ttl_s' => 120, // [MXAIR2026-ROLL]
+    'feed_aggregate_ttl_s' => 90, // [MXAIR2026-ROLL]
     'feed_center_cache_ttl_ms' => 8000, // [MXAIR2026-ROLL]
     'feed_aggregate_cache_ttl_ms' => 2500, // [MXAIR2026-ROLL]
     'feed_max_centers_per_request' => 1, // [MXAIR2026-ROLL]
@@ -132,7 +125,7 @@ $config = [
     // Settings persistence (SQLite).
     'settings_db' => __DIR__ . '/data/adsb.sqlite',
     // Polling interval for the frontend (milliseconds).
-    'poll_interval_ms' => 2500, // [MXAIR2026-ROLL]
+    'poll_interval_ms' => 2000, // [MXAIR2026]
     // Client TTL for stale targets (seconds).
     'target_ttl_s' => 120,
     // Track history defaults.

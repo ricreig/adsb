@@ -20,7 +20,7 @@ $defaults = [
         'lat' => (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541),
         'lon' => (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97),
     ],
-    'poll_interval_ms' => (int)$config['poll_interval_ms'],
+    'poll_interval_ms' => (int)($config['frontend_poll_ms'] ?? $config['poll_interval_ms']), // [MXAIR2026-ROLL]
     'rings' => [
         'distances' => [50, 100, 150, 200, 250],
         'style' => [
@@ -29,6 +29,15 @@ $defaults = [
             'dash' => '6 6',
         ],
     ],
+    'feed_rings' => [ // [MXAIR2026-ROLL]
+        'enabled' => false, // [MXAIR2026-ROLL]
+        'distance_nm' => 250, // [MXAIR2026-ROLL]
+        'style' => [ // [MXAIR2026-ROLL]
+            'color' => '#33ff99', // [MXAIR2026-ROLL]
+            'weight' => 1, // [MXAIR2026-ROLL]
+            'dash' => '4 6', // [MXAIR2026-ROLL]
+        ], // [MXAIR2026-ROLL]
+    ], // [MXAIR2026-ROLL]
     'labels' => [
         'show_alt' => true,
         'show_gs' => true,
@@ -192,6 +201,28 @@ function normalizeSettings(array $input, array $base, array $config): array
             }
         }
     }
+
+    if (isset($input['feed_rings']) && is_array($input['feed_rings'])) { // [MXAIR2026-ROLL]
+        $settings['feed_rings']['enabled'] = normalizeBoolean($input['feed_rings']['enabled'] ?? $settings['feed_rings']['enabled']); // [MXAIR2026-ROLL]
+        $distance = filter_var($input['feed_rings']['distance_nm'] ?? null, FILTER_VALIDATE_FLOAT); // [MXAIR2026-ROLL]
+        if ($distance !== false && $distance > 0) { // [MXAIR2026-ROLL]
+            $settings['feed_rings']['distance_nm'] = min(250, (float)$distance); // [MXAIR2026-ROLL]
+        } // [MXAIR2026-ROLL]
+        if (isset($input['feed_rings']['style']) && is_array($input['feed_rings']['style'])) { // [MXAIR2026-ROLL]
+            $settings['feed_rings']['style']['color'] = normalizeHexColor( // [MXAIR2026-ROLL]
+                $input['feed_rings']['style']['color'] ?? '', // [MXAIR2026-ROLL]
+                $settings['feed_rings']['style']['color'] // [MXAIR2026-ROLL]
+            ); // [MXAIR2026-ROLL]
+            $weight = filter_var($input['feed_rings']['style']['weight'] ?? null, FILTER_VALIDATE_FLOAT); // [MXAIR2026-ROLL]
+            if ($weight !== false && $weight > 0 && $weight <= 10) { // [MXAIR2026-ROLL]
+                $settings['feed_rings']['style']['weight'] = (float)$weight; // [MXAIR2026-ROLL]
+            } // [MXAIR2026-ROLL]
+            $dash = $input['feed_rings']['style']['dash'] ?? ''; // [MXAIR2026-ROLL]
+            if (is_string($dash)) { // [MXAIR2026-ROLL]
+                $settings['feed_rings']['style']['dash'] = trim($dash); // [MXAIR2026-ROLL]
+            } // [MXAIR2026-ROLL]
+        } // [MXAIR2026-ROLL]
+    } // [MXAIR2026-ROLL]
 
     if (isset($input['labels']) && is_array($input['labels'])) {
         $settings['labels']['show_alt'] = normalizeBoolean($input['labels']['show_alt'] ?? $settings['labels']['show_alt']);

@@ -647,7 +647,7 @@ if (is_dir($geojsonDir)) {
                     <input type="number" id="radiusInput" min="1" max="250" value="<?php echo htmlspecialchars((string)($config['feed_radius_nm'] ?? $config['adsb_radius'] ?? 250)); ?>" style="width:80px;margin-left:4px;" disabled/>
                 </label>
                 <label style="display:block;margin-bottom:4px;">Polling Interval (ms)
-                    <input type="number" id="pollIntervalInput" min="500" max="5000" value="<?php echo (int)($config['frontend_poll_ms'] ?? $config['poll_interval_ms']); ?>" style="width:80px;margin-left:4px;"/> <!-- // [MXAIR2026-ROLL] -->
+                    <input type="number" id="pollIntervalInput" min="500" max="5000" value="<?php echo (int)$config['poll_interval_ms']; ?>" style="width:80px;margin-left:4px;"/> <!-- // [MXAIR2026] -->
                 </label>
                 <label style="display:block;margin-bottom:4px;">Range Rings (NM, comma‑sep)
                     <input type="text" id="ringDistances" value="50,100,150,200,250" style="width:120px;margin-left:4px;"/>
@@ -661,10 +661,6 @@ if (is_dir($geojsonDir)) {
                 <label style="display:block;margin-bottom:4px;">Ring Dash (CSS dash)
                     <input type="text" id="ringDash" value="6 6" style="width:90px;margin-left:4px;"/>
                 </label>
-                <label style="display:block;margin-bottom:4px;"> <!-- // [MXAIR2026-ROLL] -->
-                    <input type="checkbox" id="feedRingsToggle"/> <!-- // [MXAIR2026-ROLL] -->
-                    Mostrar cobertura 250 NM por centro <!-- // [MXAIR2026-ROLL] -->
-                </label> <!-- // [MXAIR2026-ROLL] -->
                 <label style="display:block;margin-bottom:4px;">
                     <input type="checkbox" id="showLabels" checked/>
                     Show Track Labels
@@ -991,7 +987,7 @@ if (is_dir($geojsonDir)) {
             lat: <?php echo (float)($config['ui_center']['lat'] ?? $config['display_center']['lat'] ?? 32.541); ?>,
             lon: <?php echo (float)($config['ui_center']['lon'] ?? $config['display_center']['lon'] ?? -116.97); ?>,
         },
-        poll_interval_ms: <?php echo (int)($config['frontend_poll_ms'] ?? $config['poll_interval_ms']); ?>, // [MXAIR2026-ROLL]
+        poll_interval_ms: <?php echo (int)$config['poll_interval_ms']; ?>,
         rings: {
             distances: [50, 100, 150, 200, 250],
             style: {
@@ -1000,15 +996,6 @@ if (is_dir($geojsonDir)) {
                 dash: '6 6',
             },
         },
-        feed_rings: { // [MXAIR2026-ROLL]
-            enabled: false, // [MXAIR2026-ROLL]
-            distance_nm: 250, // [MXAIR2026-ROLL]
-            style: { // [MXAIR2026-ROLL]
-                color: '#33ff99', // [MXAIR2026-ROLL]
-                weight: 1, // [MXAIR2026-ROLL]
-                dash: '4 6', // [MXAIR2026-ROLL]
-            }, // [MXAIR2026-ROLL]
-        }, // [MXAIR2026-ROLL]
         labels: {
             show_alt: true,
             show_gs: true,
@@ -1071,11 +1058,6 @@ if (is_dir($geojsonDir)) {
         }
         const uiSource = input && input.ui_center ? input.ui_center : (input && input.display_center ? input.display_center : {});
         merged.ui_center = { ...defaultSettings.ui_center, ...uiSource };
-        const feedRingsSource = input && input.feed_rings ? input.feed_rings : {}; // [MXAIR2026-ROLL]
-        merged.feed_rings = { ...defaultSettings.feed_rings, ...feedRingsSource }; // [MXAIR2026-ROLL]
-        if (feedRingsSource && feedRingsSource.style) { // [MXAIR2026-ROLL]
-            merged.feed_rings.style = { ...defaultSettings.feed_rings.style, ...feedRingsSource.style }; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
         merged.tracks = { ...defaultSettings.tracks, ...(input && input.tracks ? input.tracks : {}) };
         merged.leader = { ...defaultSettings.leader, ...(input && input.leader ? input.leader : {}) };
         return merged;
@@ -1964,8 +1946,6 @@ if (is_dir($geojsonDir)) {
 
     // Range ring overlay container
     let rangeRings = [];
-    let feedCenterRings = []; // [MXAIR2026-ROLL]
-    let feedCentersFromFeed = []; // [MXAIR2026-ROLL]
 
     function syncLeaderControls(mode) {
         const normalizedMode = mode === 'distance' ? 'distance' : 'time';
@@ -1991,7 +1971,6 @@ if (is_dir($geojsonDir)) {
         document.documentElement.style.setProperty('--ui-font-size', settings.display.ui_font_size || 12); // [MXAIR2026]
         map.setView([settings.ui_center.lat, settings.ui_center.lon], map.getZoom());
         updateRangeRings();
-        updateFeedCenterRings(); // [MXAIR2026-ROLL]
         switchBasemap(settings.display && settings.display.basemap ? settings.display.basemap : 'dark');
         updateLabelVisibility();
         updateNavpoints();
@@ -2028,38 +2007,6 @@ if (is_dir($geojsonDir)) {
             rangeRings.push(circle);
         });
     }
-
-    function updateFeedCenterRings() { // [MXAIR2026-ROLL]
-        feedCenterRings.forEach(r => map.removeLayer(r)); // [MXAIR2026-ROLL]
-        feedCenterRings = []; // [MXAIR2026-ROLL]
-        if (!settings.feed_rings || !settings.feed_rings.enabled) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        const centers = Array.isArray(feedCentersFromFeed) && feedCentersFromFeed.length > 0 // [MXAIR2026-ROLL]
-            ? feedCentersFromFeed // [MXAIR2026-ROLL]
-            : []; // [MXAIR2026-ROLL]
-        if (!centers.length) { // [MXAIR2026-ROLL]
-            return; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        const distanceNm = settings.feed_rings.distance_nm || 250; // [MXAIR2026-ROLL]
-        const dashArray = settings.feed_rings.style && settings.feed_rings.style.dash ? settings.feed_rings.style.dash : '4 6'; // [MXAIR2026-ROLL]
-        const color = settings.feed_rings.style && settings.feed_rings.style.color ? settings.feed_rings.style.color : '#33ff99'; // [MXAIR2026-ROLL]
-        const weight = settings.feed_rings.style && settings.feed_rings.style.weight ? settings.feed_rings.style.weight : 1; // [MXAIR2026-ROLL]
-        centers.forEach(center => { // [MXAIR2026-ROLL]
-            if (!center || !isValidLat(center.lat) || !isValidLon(center.lon)) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-            const circle = L.circle([center.lat, center.lon], { // [MXAIR2026-ROLL]
-                color: color, // [MXAIR2026-ROLL]
-                weight: weight, // [MXAIR2026-ROLL]
-                fill: false, // [MXAIR2026-ROLL]
-                radius: distanceNm * 1852, // [MXAIR2026-ROLL]
-                dashArray: dashArray, // [MXAIR2026-ROLL]
-            }); // [MXAIR2026-ROLL]
-            circle.addTo(map); // [MXAIR2026-ROLL]
-            feedCenterRings.push(circle); // [MXAIR2026-ROLL]
-        }); // [MXAIR2026-ROLL]
-    } // [MXAIR2026-ROLL]
 
     map.on('zoomend', () => {
         updateLabelVisibility();
@@ -3694,10 +3641,6 @@ if (is_dir($geojsonDir)) {
                 } else {
                     clearFeedError();
                 }
-                if (Array.isArray(data.feed_centers)) { // [MXAIR2026-ROLL]
-                    feedCentersFromFeed = data.feed_centers; // [MXAIR2026-ROLL]
-                    updateFeedCenterRings(); // [MXAIR2026-ROLL]
-                } // [MXAIR2026-ROLL]
                 try { // [MXAIR2026-ROLL]
                     const seenIds = new Set(); // [MXAIR2026-ROLL]
                     const now = Date.now(); // [MXAIR2026-ROLL]
@@ -3848,7 +3791,6 @@ if (is_dir($geojsonDir)) {
         document.getElementById('ringColour').value = settings.rings.style.color;
         document.getElementById('ringWeight').value = settings.rings.style.weight;
         document.getElementById('ringDash').value = settings.rings.style.dash;
-        document.getElementById('feedRingsToggle').checked = !!(settings.feed_rings && settings.feed_rings.enabled); // [MXAIR2026-ROLL]
         document.getElementById('labelFontSize').value = settings.labels.font_size;
         document.getElementById('labelColour').value = settings.labels.color;
         document.getElementById('uiFontSize').value = settings.display.ui_font_size || 12; // [MXAIR2026]
@@ -3915,7 +3857,6 @@ if (is_dir($geojsonDir)) {
         settings.rings.style.color = document.getElementById('ringColour').value;
         settings.rings.style.weight = parseFloat(document.getElementById('ringWeight').value) || settings.rings.style.weight;
         settings.rings.style.dash = document.getElementById('ringDash').value;
-        settings.feed_rings.enabled = document.getElementById('feedRingsToggle').checked; // [MXAIR2026-ROLL]
         settings.labels.font_size = parseInt(document.getElementById('labelFontSize').value, 10) || settings.labels.font_size;
         settings.labels.color = document.getElementById('labelColour').value;
         settings.display.ui_font_size = parseInt(document.getElementById('uiFontSize').value, 10) || settings.display.ui_font_size; // [MXAIR2026]
