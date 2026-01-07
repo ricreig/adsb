@@ -1,0 +1,7 @@
+[2026-01-07T11:21:46+00:00] atz.geojson: features=9 coords=1089 out_of_range=0 invalid_geometry=0 examples=Aeropuerto - Zona de Transito de Aerodromo (ATZ), Aeropuerto - Zona de Tránsito de Aeródromo (ATZ), Aeropuerto - Zona de Tránsito de Aeródromo (ATZ)
+[2026-01-07T11:21:46+00:00] ctr.geojson: features=6 coords=509 out_of_range=0 invalid_geometry=0 examples=Aeropuerto - Zona de Control (CTR), Aeropuerto - Zona de Control (CTR), Aeropuerto - Zona de Control (CTR)
+[2026-01-07T11:21:46+00:00] fir-limits.geojson: features=31 coords=594 out_of_range=0 invalid_geometry=0 examples=MMZT_BORDER, MMZT_SECTOR_1, MMZT_SECTOR_2
+[2026-01-07T11:21:46+00:00] mex-border.geojson: features=1 coords=26 out_of_range=0 invalid_geometry=0 examples=Mexico
+[2026-01-07T11:21:46+00:00] nav-points.geojson: features=2 coords=2 out_of_range=0 invalid_geometry=0 examples=TIJ VOR, MMTJ
+[2026-01-07T11:21:46+00:00] restricted-areas.geojson: features=5 coords=338 out_of_range=0 invalid_geometry=0 examples=MMP-2 MILITAR, MMP-3 SANTA FE, MMP-6 ZOCALO
+[2026-01-07T11:21:46+00:00] tma.geojson: features=1 coords=5 out_of_range=0 invalid_geometry=0 examples=TIJUANA TMA
