@@ -1,0 +1,7 @@
+AddType application/geo+json .geojson
+AddType application/json .json
+<IfModule mod_headers.c>
+    <FilesMatch "\.geojson$">
+        Header set Content-Type "application/geo+json"
+    </FilesMatch>
+</IfModule>

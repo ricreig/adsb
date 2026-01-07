@@ -37,10 +37,10 @@ $config = [
     'feed_radius_nm' => 250,
     // National feed centers to cover all Mexico (lat/lon/radius_nm). // [MXAIR2026]
     'feed_centers' => [ // [MXAIR2026]
-        [ 'name' => 'Mazatlan', 'lat' => 23.2167, 'lon' => -106.4167, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
-        [ 'name' => 'Monterrey', 'lat' => 25.6866, 'lon' => -100.3161, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
-        [ 'name' => 'Ciudad de Mexico', 'lat' => 19.4326, 'lon' => -99.1332, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
-        [ 'name' => 'Merida', 'lat' => 20.9674, 'lon' => -89.5926, 'radius_nm' => 250 ], // [MXAIR2026-ROLL]
+        [ 'name' => 'Mazatlán', 'lat' => 23.2167, 'lon' => -106.4167, 'radius_nm' => 250 ], // [MXAIR2026]
+        [ 'name' => 'Monterrey', 'lat' => 25.6866, 'lon' => -100.3161, 'radius_nm' => 250 ], // [MXAIR2026]
+        [ 'name' => 'Ciudad de México', 'lat' => 19.4326, 'lon' => -99.1332, 'radius_nm' => 250 ], // [MXAIR2026]
+        [ 'name' => 'Mérida', 'lat' => 20.9674, 'lon' => -89.5926, 'radius_nm' => 250 ], // [MXAIR2026]
     ],
     // UI center (range rings + BRL/distance calculations) defaults to MMTJ.
     'ui_center' => [
@@ -159,17 +159,6 @@ if (is_file($runtimeOverride)) {
     $overrides = require $runtimeOverride;
     if (is_array($overrides)) {
         $config = array_replace_recursive($config, $overrides);
-    }
-}
-
-// Normalize legacy backup paths if present. // [MXAIR2026-ROLL]
-$vatmexPathKeys = ['vatmex_dir', 'vatmex_repo_dir', 'vatmex_airac_dir']; // [MXAIR2026-ROLL]
-$legacyFragment = 'adsb' . '-backup'; // [MXAIR2026-ROLL]
-foreach ($vatmexPathKeys as $key) { // [MXAIR2026-ROLL]
-    if (!empty($config[$key]) && is_string($config[$key])) { // [MXAIR2026-ROLL]
-        if (strpos($config[$key], $legacyFragment) !== false) { // [MXAIR2026-ROLL]
-            $config[$key] = str_replace($legacyFragment, 'adsb', $config[$key]); // [MXAIR2026-ROLL]
-        }
     }
 }
 

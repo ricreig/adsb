@@ -825,16 +825,12 @@ if (is_dir($geojsonDir)) {
 
     // PHP passes the list of available GeoJSON layers as JSON here.
     const geojsonLayers = <?php echo json_encode($layerFiles, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES); ?>;
-    let geojsonManifest = { ...geojsonLayers }; // [MXAIR2026-ROLL]
 
     function getGeojsonLayerUrl(id) {
         if (!geojsonLayers || !geojsonLayers[id]) {
             return null;
         }
         return buildUrl(geojsonLayers[id]);
-    }
-    function resolveGeojsonFile(id) { // [MXAIR2026-ROLL]
-        return geojsonManifest && geojsonManifest[id] ? geojsonManifest[id] : null; // [MXAIR2026-ROLL]
     }
     const errorOverlay = document.getElementById('errorOverlay');
     const diagnosticsContent = document.getElementById('diagnosticsContent');
@@ -1094,38 +1090,20 @@ if (is_dir($geojsonDir)) {
         });
     }
 
-    function fetchGeoJson(url, context) { // [MXAIR2026-ROLL]
-        return fetch(url, { cache: 'no-store' }).then(async resp => { // [MXAIR2026-ROLL]
-            const bodyText = await resp.text().catch(() => ''); // [MXAIR2026-ROLL]
-            if (!resp.ok) { // [MXAIR2026-ROLL]
-                const error = new Error(`${context || 'Request failed'} (${resp.status}) ${resp.statusText}`); // [MXAIR2026-ROLL]
-                error.status = resp.status; // [MXAIR2026-ROLL]
-                error.statusText = resp.statusText; // [MXAIR2026-ROLL]
-                error.url = url; // [MXAIR2026-ROLL]
-                error.contentType = resp.headers.get('content-type') || ''; // [MXAIR2026-ROLL]
-                error.body = bodyText; // [MXAIR2026-ROLL]
-                throw error; // [MXAIR2026-ROLL]
+    function fetchGeoJson(url, context) {
+        return fetchJson(
+            url,
+            { cache: 'no-store' },
+            context,
+            ['application/json', 'application/geo+json', 'application/vnd.geo+json']
+        ).then(data => {
+            if (!data || !data.type) {
+                const error = new Error('GeoJSON missing type');
+                error.url = url;
+                throw error;
             }
-            let parsed = null; // [MXAIR2026-ROLL]
-            try { // [MXAIR2026-ROLL]
-                parsed = JSON.parse(bodyText); // [MXAIR2026-ROLL]
-            } catch (err) { // [MXAIR2026-ROLL]
-                const error = new Error(`${context || 'Request failed'} (invalid GeoJSON)`); // [MXAIR2026-ROLL]
-                error.url = url; // [MXAIR2026-ROLL]
-                error.contentType = resp.headers.get('content-type') || ''; // [MXAIR2026-ROLL]
-                error.body = bodyText; // [MXAIR2026-ROLL]
-                throw error; // [MXAIR2026-ROLL]
-            }
-            if (!parsed || !parsed.type) { // [MXAIR2026-ROLL]
-                const error = new Error('GeoJSON missing type'); // [MXAIR2026-ROLL]
-                error.url = url; // [MXAIR2026-ROLL]
-                throw error; // [MXAIR2026-ROLL]
-            }
-            return parsed; // [MXAIR2026-ROLL]
-        }).catch(err => { // [MXAIR2026-ROLL]
-            reportError(context || 'Fetch error', formatFetchErrorDetail(err, url)); // [MXAIR2026-ROLL]
-            throw err; // [MXAIR2026-ROLL]
-        }); // [MXAIR2026-ROLL]
+            return data;
+        });
     }
 
     function loadScript(url, options = {}) {
@@ -1290,7 +1268,6 @@ if (is_dir($geojsonDir)) {
     let navpointsLastWarning = 0;
     let navpointsGeojson = null;
     let navpointsGeojsonLoaded = false;
-    let navpointsUrl = resolveGeojsonFile('nav-points'); // [MXAIR2026-ROLL]
     const navpointColour = '#ffd166';
     const stationFilterInput = document.getElementById('stationFilterInput');
     let stationFilterList = [];
@@ -1307,49 +1284,19 @@ if (is_dir($geojsonDir)) {
     const navpointsLayer = L.layerGroup(); // [MXAIR2026]
 
     const layerDefinitions = {
-        fir: { id: 'fir-limits', label: 'FIR', file: resolveGeojsonFile('fir-limits'), layer: L.geoJSON(null, { style: { color: '#00b4d8', weight: 2, fill: false } }) }, // [MXAIR2026-ROLL]
-        border: { id: 'mex-border', label: 'Frontera', file: resolveGeojsonFile('mex-border'), layer: L.geoJSON(null, { style: { color: '#f4d35e', weight: 2, fill: false, dashArray: '6 4' } }) }, // [MXAIR2026-ROLL]
-        ctr: { id: 'ctr', label: 'CTR', file: resolveGeojsonFile('ctr'), layer: L.geoJSON(null, { style: { color: '#06d6a0', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
-        tma: { id: 'tma', label: 'TMA', file: resolveGeojsonFile('tma'), layer: L.geoJSON(null, { style: { color: '#5ec8ff', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
-        atz: { id: 'atz', label: 'ATZ', file: resolveGeojsonFile('atz'), layer: L.geoJSON(null, { style: { color: '#ffd166', weight: 2, fillOpacity: 0.08 } }) }, // [MXAIR2026-ROLL]
-        restricted: { id: 'restricted-areas', label: 'Áreas restringidas', file: resolveGeojsonFile('restricted-areas'), layer: L.geoJSON(null, { style: { color: '#ef476f', weight: 2, fillOpacity: 0.12 } }) }, // [MXAIR2026-ROLL]
+        fir: { id: 'fir-limits', label: 'FIR', file: 'data/fir-limits.geojson', layer: L.geoJSON(null, { style: { color: '#00b4d8', weight: 2, fill: false } }) },
+        border: { id: 'mex-border', label: 'Frontera', file: 'data/mex-border.geojson', layer: L.geoJSON(null, { style: { color: '#f4d35e', weight: 2, fill: false, dashArray: '6 4' } }) },
+        ctr: { id: 'ctr', label: 'CTR', file: 'data/ctr.geojson', layer: L.geoJSON(null, { style: { color: '#06d6a0', weight: 2, fillOpacity: 0.08 } }) },
+        tma: { id: 'tma', label: 'TMA', file: 'data/tma.geojson', layer: L.geoJSON(null, { style: { color: '#5ec8ff', weight: 2, fillOpacity: 0.08 } }) },
+        atz: { id: 'atz', label: 'ATZ', file: 'data/atz.geojson', layer: L.geoJSON(null, { style: { color: '#ffd166', weight: 2, fillOpacity: 0.08 } }) },
+        restricted: { id: 'restricted-areas', label: 'Áreas restringidas', file: 'data/restricted-areas.geojson', layer: L.geoJSON(null, { style: { color: '#ef476f', weight: 2, fillOpacity: 0.12 } }) },
         navpoints: { id: 'nav-points', label: 'Navpoints', layer: navpointsLayer },
-        sid: { id: 'sid', label: 'SID', file: resolveGeojsonFile('sid'), layer: L.geoJSON(null, { style: { color: '#ff9f1c', weight: 2, dashArray: '6 6' } }) }, // [MXAIR2026-ROLL]
-        star: { id: 'star', label: 'STAR', file: resolveGeojsonFile('star'), layer: L.geoJSON(null, { style: { color: '#2ec4b6', weight: 2, dashArray: '2 6' } }) }, // [MXAIR2026-ROLL]
-        app: { id: 'app', label: 'APP', file: resolveGeojsonFile('app'), layer: L.geoJSON(null, { style: { color: '#e71d36', weight: 2 } }) }, // [MXAIR2026-ROLL]
-        airwaysUpper: { id: 'airways-upper', label: 'Aerovías superiores', file: resolveGeojsonFile('airways-upper'), layer: L.geoJSON(null, { style: { color: '#9b5de5', weight: 1.5, dashArray: '4 4' } }) }, // [MXAIR2026-ROLL]
-        airwaysLower: { id: 'airways-lower', label: 'Aerovías inferiores', file: resolveGeojsonFile('airways-lower'), layer: L.geoJSON(null, { style: { color: '#00bbf9', weight: 1.5, dashArray: '2 4' } }) }, // [MXAIR2026-ROLL]
+        sid: { id: 'sid', label: 'SID', file: 'data/sid.geojson', layer: L.geoJSON(null, { style: { color: '#ff9f1c', weight: 2, dashArray: '6 6' } }) },
+        star: { id: 'star', label: 'STAR', file: 'data/star.geojson', layer: L.geoJSON(null, { style: { color: '#2ec4b6', weight: 2, dashArray: '2 6' } }) },
+        app: { id: 'app', label: 'APP', file: 'data/app.geojson', layer: L.geoJSON(null, { style: { color: '#e71d36', weight: 2 } }) },
+        airwaysUpper: { id: 'airways-upper', label: 'Aerovías superiores', file: 'data/airways-upper.geojson', layer: L.geoJSON(null, { style: { color: '#9b5de5', weight: 1.5, dashArray: '4 4' } }) },
+        airwaysLower: { id: 'airways-lower', label: 'Aerovías inferiores', file: 'data/airways-lower.geojson', layer: L.geoJSON(null, { style: { color: '#00bbf9', weight: 1.5, dashArray: '2 4' } }) },
     };
-    const layerAvailability = {}; // [MXAIR2026-ROLL]
-    function applyGeojsonManifest(manifest) { // [MXAIR2026-ROLL]
-        geojsonManifest = manifest && typeof manifest === 'object' ? { ...manifest } : {}; // [MXAIR2026-ROLL]
-        Object.values(layerDefinitions).forEach(def => { // [MXAIR2026-ROLL]
-            if (!def || !def.id) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            }
-            const available = !!geojsonManifest[def.id]; // [MXAIR2026-ROLL]
-            layerAvailability[def.id] = available; // [MXAIR2026-ROLL]
-            if (Object.prototype.hasOwnProperty.call(def, 'file')) { // [MXAIR2026-ROLL]
-                def.file = available ? geojsonManifest[def.id] : null; // [MXAIR2026-ROLL]
-            }
-            if (def.id === 'nav-points') { // [MXAIR2026-ROLL]
-                navpointsUrl = available ? geojsonManifest[def.id] : null; // [MXAIR2026-ROLL]
-            }
-        }); // [MXAIR2026-ROLL]
-    }
-    function refreshGeojsonManifest() { // [MXAIR2026-ROLL]
-        return fetchJson(apiUrl('geojson_manifest.php'), {}, 'GeoJSON manifest') // [MXAIR2026-ROLL]
-            .then(data => { // [MXAIR2026-ROLL]
-                if (data && data.ok && data.layers) { // [MXAIR2026-ROLL]
-                    applyGeojsonManifest(data.layers); // [MXAIR2026-ROLL]
-                    syncLayerToggleAvailability(); // [MXAIR2026-ROLL]
-                } // [MXAIR2026-ROLL]
-            }) // [MXAIR2026-ROLL]
-            .catch(err => { // [MXAIR2026-ROLL]
-                console.warn('Failed to refresh GeoJSON manifest', err); // [MXAIR2026-ROLL]
-            }); // [MXAIR2026-ROLL]
-    }
-    applyGeojsonManifest(geojsonManifest); // [MXAIR2026-ROLL]
 
     const stationFilteredLayers = new Set(['ctr', 'tma', 'atz', 'sid', 'star', 'app']);
 
@@ -1427,12 +1374,7 @@ if (is_dir($geojsonDir)) {
             return Promise.resolve(navpointsGeojson);
         }
         navpointsGeojsonLoaded = true;
-        if (!navpointsUrl) { // [MXAIR2026-ROLL]
-            reportError('Navpoints layer missing', 'nav-points.geojson not available'); // [MXAIR2026-ROLL]
-            navpointsGeojsonLoaded = false; // [MXAIR2026-ROLL]
-            return Promise.resolve(null); // [MXAIR2026-ROLL]
-        }
-        const url = buildUrl(navpointsUrl); // [MXAIR2026-ROLL]
+        const url = buildUrl('data/nav-points.geojson');
         return fetchGeoJson(url, `Navpoints layer (${url})`)
             .then(data => {
                 navpointsGeojson = data;
@@ -1507,51 +1449,6 @@ if (is_dir($geojsonDir)) {
         return checkbox;
     }
 
-    function syncLayerToggleAvailability() { // [MXAIR2026-ROLL]
-        Object.keys(layerDefinitions).forEach(key => { // [MXAIR2026-ROLL]
-            const def = layerDefinitions[key]; // [MXAIR2026-ROLL]
-            if (!def || !def.id) { // [MXAIR2026-ROLL]
-                return; // [MXAIR2026-ROLL]
-            }
-            const available = layerAvailability[def.id] !== false; // [MXAIR2026-ROLL]
-            const toggle = layerToggles[key]; // [MXAIR2026-ROLL]
-            if (toggle) { // [MXAIR2026-ROLL]
-                toggle.disabled = !available; // [MXAIR2026-ROLL]
-                if (!available) { // [MXAIR2026-ROLL]
-                    toggle.checked = false; // [MXAIR2026-ROLL]
-                    setLayerEnabled(key, false); // [MXAIR2026-ROLL]
-                } // [MXAIR2026-ROLL]
-            }
-        }); // [MXAIR2026-ROLL]
-        if (airwaysUpperToggle) { // [MXAIR2026-ROLL]
-            const available = layerAvailability['airways-upper'] !== false; // [MXAIR2026-ROLL]
-            airwaysUpperToggle.disabled = !available; // [MXAIR2026-ROLL]
-            if (!available) { // [MXAIR2026-ROLL]
-                airwaysUpperToggle.checked = false; // [MXAIR2026-ROLL]
-                setLayerEnabled('airwaysUpper', false); // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        if (airwaysLowerToggle) { // [MXAIR2026-ROLL]
-            const available = layerAvailability['airways-lower'] !== false; // [MXAIR2026-ROLL]
-            airwaysLowerToggle.disabled = !available; // [MXAIR2026-ROLL]
-            if (!available) { // [MXAIR2026-ROLL]
-                airwaysLowerToggle.checked = false; // [MXAIR2026-ROLL]
-                setLayerEnabled('airwaysLower', false); // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        if (firLimitsToggle) { // [MXAIR2026-ROLL]
-            const available = layerAvailability['fir-limits'] !== false; // [MXAIR2026-ROLL]
-            firLimitsToggle.disabled = !available; // [MXAIR2026-ROLL]
-            if (!available) { // [MXAIR2026-ROLL]
-                firLimitsToggle.checked = false; // [MXAIR2026-ROLL]
-                setLayerEnabled('fir', false); // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-        if (layerToggles.navpoints && layerAvailability['nav-points'] === false) { // [MXAIR2026-ROLL]
-            layerToggles.navpoints.checked = false; // [MXAIR2026-ROLL]
-        } // [MXAIR2026-ROLL]
-    }
-
     addLayerToggle('ctr', 'CTR');
     addLayerToggle('tma', 'TMA');
     addLayerToggle('atz', 'ATZ');
@@ -1577,8 +1474,6 @@ if (is_dir($geojsonDir)) {
         firLimitsToggle.checked = !!layerState.fir;
         firLimitsToggle.addEventListener('change', () => setLayerEnabled('fir', firLimitsToggle.checked));
     }
-    syncLayerToggleAvailability(); // [MXAIR2026-ROLL]
-    refreshGeojsonManifest(); // [MXAIR2026-ROLL]
 
     function applyStationFilterInput() {
         const raw = (stationFilterInput && stationFilterInput.value ? stationFilterInput.value : '').toUpperCase();
@@ -2687,8 +2582,6 @@ if (is_dir($geojsonDir)) {
     function buildStripHtml(ac, status) {
         const flightId = ac._id || ac.hex;
         const callsign = ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || flightId);
-        const registration = (ac.reg || ac.registration || '').toString().trim().toUpperCase(); // [MXAIR2026-ROLL]
-        const registrationLabel = registration || ac.hex || (ac.flight ? ac.flight.trim().toUpperCase() : ''); // [MXAIR2026-ROLL]
         const alt = ac.alt ? `${ac.alt}FT` : '---';
         const gs = ac.gs ? `${ac.gs}KT` : '---';
         const trk = ac.track ? `${ac.track}°` : '---';
@@ -2718,7 +2611,7 @@ if (is_dir($geojsonDir)) {
         return `
             <div class="strip-header"> <!-- // [MXAIR2026] -->
                 <span>
-                    <span class="strip-call" data-flight-id="${flightId}">${callsign}</span>${registrationLabel ? ` <span class="strip-call" data-flight-id="${flightId}">(${registrationLabel})</span>` : ''} <!-- // [MXAIR2026-ROLL] -->
+                    <span class="strip-call" data-flight-id="${flightId}">${callsign}</span>${reg ? ` <span class="strip-call" data-flight-id="${flightId}">(${reg})</span>` : ''}
                 </span>
                 <span class="strip-status">${statusLabel}</span>
             </div>
@@ -2785,13 +2678,7 @@ if (is_dir($geojsonDir)) {
             strip.classList.toggle('released', status === 'released');
             strip.classList.toggle('pending', status === 'normal');
             strip.classList.toggle('selected', selectedFlight === flightId || selectedStrip === flightId);
-            try { // [MXAIR2026-ROLL]
-                strip.innerHTML = buildStripHtml(ac, status); // [MXAIR2026-ROLL]
-            } catch (err) { // [MXAIR2026-ROLL]
-                console.error('Strip render failed', err); // [MXAIR2026-ROLL]
-                reportError('Strip render failed', err && err.message ? err.message : String(err || 'Unknown')); // [MXAIR2026-ROLL]
-                strip.innerHTML = `<div class="strip-header"><span class="strip-call" data-flight-id="${flightId}">${flightId}</span><span class="strip-status">ERROR</span></div>`; // [MXAIR2026-ROLL]
-            } // [MXAIR2026-ROLL]
+            strip.innerHTML = buildStripHtml(ac, status);
             strip.querySelectorAll('.strip-call').forEach(el => { // [MXAIR2026]
                 if (el.dataset.bound) { // [MXAIR2026]
                     return; // [MXAIR2026]
@@ -3299,56 +3186,51 @@ if (is_dir($geojsonDir)) {
                 } else {
                     clearFeedError();
                 }
-                try { // [MXAIR2026-ROLL]
-                    const seenIds = new Set(); // [MXAIR2026-ROLL]
-                    const now = Date.now(); // [MXAIR2026-ROLL]
-                    const observedAt = Number.isFinite(data.generated_at_ms) ? data.generated_at_ms : now; // [MXAIR2026-ROLL]
-                    const missingGraceMs = Math.max(targetTtlMs, (settings.poll_interval_ms || 1500) * 6); // [MXAIR2026-ROLL]
-                    (data.ac || []).forEach(ac => { // [MXAIR2026-ROLL]
-                        if (!ac) { // [MXAIR2026-ROLL]
-                            return; // [MXAIR2026-ROLL]
+                const seenIds = new Set();
+                const now = Date.now();
+                const observedAt = Number.isFinite(data.generated_at_ms) ? data.generated_at_ms : now;
+                const missingGraceMs = Math.max(targetTtlMs, (settings.poll_interval_ms || 1500) * 6);
+                (data.ac || []).forEach(ac => {
+                    if (!ac) {
+                        return;
+                    }
+                    const lat = coerceNumber(ac.lat);
+                    const lon = coerceNumber(ac.lon);
+                    if (lat === null || lon === null || !isValidLat(lat) || !isValidLon(lon)) {
+                        return;
+                    }
+                    ac.lat = lat;
+                    ac.lon = lon;
+                    const seenPos = coerceNumber(ac.seen_pos);
+                    if (seenPos !== null && seenPos * 1000 > targetTtlMs) {
+                        return;
+                    }
+                    ac.hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid) || null;
+                    const flightId = buildAircraftId(ac);
+                    if (!flightId) {
+                        return;
+                    }
+                    ac._id = flightId;
+                    seenIds.add(flightId);
+                    const previous = flights[flightId] || {};
+                    const note = previous.note || noteStore[flightId] || stripNotes[flightId] || ac.note || '';
+                    const lastSeen = seenPos !== null ? observedAt - (seenPos * 1000) : now;
+                    flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: lastSeen };
+                    renderFlight(flights[flightId]);
+                    stripDataCache[flightId] = flights[flightId];
+                });
+                Object.keys(flightMarkers).forEach(flightId => {
+                    if (!seenIds.has(flightId)) {
+                        const lastSeen = flights[flightId]?.last_seen || flightMarkers[flightId]?.lastUpdate || 0;
+                        if (now - lastSeen > missingGraceMs) {
+                            removeFlight(flightId);
                         }
-                        const lat = coerceNumber(ac.lat); // [MXAIR2026-ROLL]
-                        const lon = coerceNumber(ac.lon); // [MXAIR2026-ROLL]
-                        if (lat === null || lon === null || !isValidLat(lat) || !isValidLon(lon)) { // [MXAIR2026-ROLL]
-                            return; // [MXAIR2026-ROLL]
-                        }
-                        ac.lat = lat; // [MXAIR2026-ROLL]
-                        ac.lon = lon; // [MXAIR2026-ROLL]
-                        const seenPos = coerceNumber(ac.seen_pos); // [MXAIR2026-ROLL]
-                        if (seenPos !== null && seenPos * 1000 > targetTtlMs) { // [MXAIR2026-ROLL]
-                            return; // [MXAIR2026-ROLL]
-                        }
-                        ac.hex = normalizeIdPart(ac.hex || ac.icao24 || ac.addr || ac.hexid) || null; // [MXAIR2026-ROLL]
-                        const flightId = buildAircraftId(ac); // [MXAIR2026-ROLL]
-                        if (!flightId) { // [MXAIR2026-ROLL]
-                            return; // [MXAIR2026-ROLL]
-                        }
-                        ac._id = flightId; // [MXAIR2026-ROLL]
-                        seenIds.add(flightId); // [MXAIR2026-ROLL]
-                        const previous = flights[flightId] || {}; // [MXAIR2026-ROLL]
-                        const note = previous.note || noteStore[flightId] || stripNotes[flightId] || ac.note || ''; // [MXAIR2026-ROLL]
-                        const lastSeen = seenPos !== null ? observedAt - (seenPos * 1000) : now; // [MXAIR2026-ROLL]
-                        flights[flightId] = { ...previous, ...ac, _id: flightId, note, last_seen: lastSeen }; // [MXAIR2026-ROLL]
-                        renderFlight(flights[flightId]); // [MXAIR2026-ROLL]
-                        stripDataCache[flightId] = flights[flightId]; // [MXAIR2026-ROLL]
-                    }); // [MXAIR2026-ROLL]
-                    Object.keys(flightMarkers).forEach(flightId => { // [MXAIR2026-ROLL]
-                        if (!seenIds.has(flightId)) { // [MXAIR2026-ROLL]
-                            const lastSeen = flights[flightId]?.last_seen || flightMarkers[flightId]?.lastUpdate || 0; // [MXAIR2026-ROLL]
-                            if (now - lastSeen > missingGraceMs) { // [MXAIR2026-ROLL]
-                                removeFlight(flightId); // [MXAIR2026-ROLL]
-                            }
-                        }
-                    }); // [MXAIR2026-ROLL]
-                    pruneFlights(); // [MXAIR2026-ROLL]
-                    updateStrips(); // [MXAIR2026-ROLL]
-                    updateLabelVisibility(); // [MXAIR2026-ROLL]
-                    syncFlightStates(); // [MXAIR2026-ROLL]
-                } catch (err) { // [MXAIR2026-ROLL]
-                    console.error('Feed render error', err); // [MXAIR2026-ROLL]
-                    reportError('Feed render error', err && err.message ? err.message : String(err || 'Unknown')); // [MXAIR2026-ROLL]
-                } // [MXAIR2026-ROLL]
+                    }
+                });
+                pruneFlights();
+                updateStrips();
+                updateLabelVisibility();
+                syncFlightStates();
             })
             .catch(err => {
                 if (err && err.name === 'AbortError') {
