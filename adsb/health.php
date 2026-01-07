@@ -80,37 +80,64 @@ if (is_file($upstreamStatusPath)) {
     if (is_array($decoded)) {
         $upstreamStatus = $decoded;
     }
-}
+} // [MXAIR2026-ROLL]
 
-$cacheFiles = glob($cacheDir . '/adsb_feed_*.json') ?: [];
-$latestCacheAge = null;
-$latestCacheMtime = null;
-if ($cacheFiles) {
-    $latestMtime = 0;
-    foreach ($cacheFiles as $file) {
-        $mtime = filemtime($file);
-        if ($mtime && $mtime > $latestMtime) {
-            $latestMtime = $mtime;
-        }
-    }
-    if ($latestMtime > 0) {
-        $latestCacheAge = time() - $latestMtime;
-        $latestCacheMtime = date('c', $latestMtime);
-    }
-}
-$cacheTtlMs = (int)($config['feed_cache_ttl_ms'] ?? 1500);
-$cacheMaxStaleMs = (int)($config['feed_cache_max_stale_ms'] ?? 5000);
-$cacheStale = null;
-if ($latestCacheAge !== null) {
-    $cacheStale = ($latestCacheAge * 1000) > $cacheMaxStaleMs;
-}
-$warnings = [];
-if ($cacheStale === true) {
-    $warnings[] = 'Feed cache is stale or not updating.';
-}
-if ($latestCacheAge === null) {
-    $warnings[] = 'Feed cache has not been created yet.';
-}
+$aggregateCacheFile = $cacheDir . '/feed_aggregate.json'; // [MXAIR2026-ROLL]
+$aggregatePayload = null; // [MXAIR2026-ROLL]
+$aggregateStoredMs = null; // [MXAIR2026-ROLL]
+if (is_file($aggregateCacheFile)) { // [MXAIR2026-ROLL]
+    $contents = file_get_contents($aggregateCacheFile); // [MXAIR2026-ROLL]
+    $decoded = $contents ? json_decode($contents, true) : null; // [MXAIR2026-ROLL]
+    if (is_array($decoded)) { // [MXAIR2026-ROLL]
+        $aggregatePayload = $decoded['payload'] ?? null; // [MXAIR2026-ROLL]
+        $aggregateStoredMs = isset($decoded['stored_ms']) ? (int)$decoded['stored_ms'] : null; // [MXAIR2026-ROLL]
+    } // [MXAIR2026-ROLL]
+} // [MXAIR2026-ROLL]
+
+$aggregateAgeMs = $aggregateStoredMs !== null ? max(0, (int)round(microtime(true) * 1000) - $aggregateStoredMs) : null; // [MXAIR2026-ROLL]
+$aggregateAgeS = $aggregateAgeMs !== null ? $aggregateAgeMs / 1000 : null; // [MXAIR2026-ROLL]
+$aggregateTtlS = (int)($config['feed_aggregate_ttl_s'] ?? 90); // [MXAIR2026-ROLL]
+$aggregateTtlMs = $aggregateTtlS * 1000; // [MXAIR2026-ROLL]
+$aggregateOk = false; // [MXAIR2026-ROLL]
+if (is_array($aggregatePayload)) { // [MXAIR2026-ROLL]
+    $aggregateTotal = (int)($aggregatePayload['total'] ?? 0); // [MXAIR2026-ROLL]
+    $aggregateOk = $aggregateTotal > 0 && $aggregateAgeMs !== null && $aggregateAgeMs <= $aggregateTtlMs; // [MXAIR2026-ROLL]
+} // [MXAIR2026-ROLL]
+
+$centerStatusFiles = glob($cacheDir . '/adsb_feed_center_*.json') ?: []; // [MXAIR2026-ROLL]
+$centerStatuses = []; // [MXAIR2026-ROLL]
+foreach ($centerStatusFiles as $file) { // [MXAIR2026-ROLL]
+    $contents = file_get_contents($file); // [MXAIR2026-ROLL]
+    $decoded = $contents ? json_decode($contents, true) : null; // [MXAIR2026-ROLL]
+    if (!is_array($decoded)) { // [MXAIR2026-ROLL]
+        continue; // [MXAIR2026-ROLL]
+    } // [MXAIR2026-ROLL]
+    $center = $decoded['center'] ?? ($decoded['payload']['feed_center'] ?? null); // [MXAIR2026-ROLL]
+    $centerName = null; // [MXAIR2026-ROLL]
+    if (is_array($center)) { // [MXAIR2026-ROLL]
+        $centerName = $center['name'] ?? null; // [MXAIR2026-ROLL]
+    } // [MXAIR2026-ROLL]
+    $centerStatuses[] = [ // [MXAIR2026-ROLL]
+        'name' => $centerName, // [MXAIR2026-ROLL]
+        'upstream_status' => $decoded['center_upstream_status'] ?? ($decoded['upstream_http'] ?? null), // [MXAIR2026-ROLL]
+        'center_last_ok_at' => $decoded['center_last_ok_at'] ?? null, // [MXAIR2026-ROLL]
+        'center_last_attempt_at' => $decoded['center_last_attempt_at'] ?? null, // [MXAIR2026-ROLL]
+        'error' => $decoded['error'] ?? null, // [MXAIR2026-ROLL]
+    ]; // [MXAIR2026-ROLL]
+} // [MXAIR2026-ROLL]
+
+$cacheTtlMs = (int)($config['feed_aggregate_cache_ttl_ms'] ?? 2500); // [MXAIR2026-ROLL]
+$cacheMaxStaleMs = $aggregateTtlMs; // [MXAIR2026-ROLL]
+$cacheStale = $aggregateAgeMs !== null ? $aggregateAgeMs > $cacheMaxStaleMs : null; // [MXAIR2026-ROLL]
+$latestCacheAge = $aggregateAgeS; // [MXAIR2026-ROLL]
+$latestCacheMtime = $aggregateStoredMs !== null ? gmdate('c', (int)floor($aggregateStoredMs / 1000)) : null; // [MXAIR2026-ROLL]
+$warnings = []; // [MXAIR2026-ROLL]
+if ($cacheStale === true) { // [MXAIR2026-ROLL]
+    $warnings[] = 'Feed aggregate is stale or not updating.'; // [MXAIR2026-ROLL]
+} // [MXAIR2026-ROLL]
+if ($aggregateStoredMs === null) { // [MXAIR2026-ROLL]
+    $warnings[] = 'Feed aggregate cache has not been created yet.'; // [MXAIR2026-ROLL]
+} // [MXAIR2026-ROLL]
 $allowUrlFopen = ini_get('allow_url_fopen');
 $allowUrlFopen = $allowUrlFopen !== false && $allowUrlFopen !== '' && $allowUrlFopen !== '0';
 $curlAvailable = function_exists('curl_init');
@@ -235,13 +262,16 @@ echo json_encode([
     ],
     'feed' => [
         'upstream' => $upstreamStatus,
+        'upstream_last_status_per_center' => $centerStatuses, // [MXAIR2026-ROLL]
+        'aggregate_ok' => $aggregateOk, // [MXAIR2026-ROLL]
+        'aggregate_age_s' => $aggregateAgeS, // [MXAIR2026-ROLL]
         'latest_cache_age_s' => $latestCacheAge,
         'latest_cache_time' => $latestCacheMtime,
         'cache_stale' => $cacheStale,
         'cache_ttl_ms' => $cacheTtlMs,
         'cache_max_stale_ms' => $cacheMaxStaleMs,
         'cache_dir' => $cacheDir,
-        'cache_entries' => count($cacheFiles),
+        'cache_entries' => count($centerStatusFiles), // [MXAIR2026-ROLL]
     ],
     'http_fetch' => [
         'allow_url_fopen' => $allowUrlFopen,
