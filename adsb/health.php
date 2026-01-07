@@ -128,6 +128,8 @@ $vatmexRepoOk = is_string($vatmexRepo) && $vatmexRepo !== '' && is_dir($vatmexRe
 $vatmexAiracOk = is_string($vatmexAirac) && $vatmexAirac !== '' && is_dir($vatmexAirac); // [MXAIR2026-ROLL]
 $vatmexMarkerOk = false; // [MXAIR2026-ROLL]
 $vatmexMarkerPath = null; // [MXAIR2026-ROLL]
+$vatmexAiracMarkerOk = false; // [MXAIR2026-ROLL]
+$vatmexAiracMarkerPath = null; // [MXAIR2026-ROLL]
 if ($vatmexRepoOk) { // [MXAIR2026-ROLL]
     $markerCandidates = [ // [MXAIR2026-ROLL]
         $vatmexRepo . '/README.md', // [MXAIR2026-ROLL]
@@ -144,8 +146,38 @@ if ($vatmexRepoOk) { // [MXAIR2026-ROLL]
         }
     }
 } // [MXAIR2026-ROLL]
-if (!$vatmexRepoOk || !$vatmexAiracOk || !$vatmexMarkerOk) { // [MXAIR2026-ROLL]
-    $warnings[] = 'VATMEX path misconfigured.'; // [MXAIR2026-ROLL]
+if ($vatmexAiracOk) { // [MXAIR2026-ROLL]
+    $airacCandidates = [ // [MXAIR2026-ROLL]
+        $vatmexAirac . '/README.md', // [MXAIR2026-ROLL]
+        $vatmexAirac . '/README', // [MXAIR2026-ROLL]
+    ]; // [MXAIR2026-ROLL]
+    foreach ($airacCandidates as $candidate) { // [MXAIR2026-ROLL]
+        if (is_file($candidate) && is_readable($candidate)) { // [MXAIR2026-ROLL]
+            $contents = file_get_contents($candidate); // [MXAIR2026-ROLL]
+            if ($contents !== false) { // [MXAIR2026-ROLL]
+                $vatmexAiracMarkerOk = true; // [MXAIR2026-ROLL]
+                $vatmexAiracMarkerPath = $candidate; // [MXAIR2026-ROLL]
+                break; // [MXAIR2026-ROLL]
+            }
+        }
+    }
+    if (!$vatmexAiracMarkerOk) { // [MXAIR2026-ROLL]
+        $xmlCandidates = glob($vatmexAirac . '/*.xml') ?: []; // [MXAIR2026-ROLL]
+        if ($xmlCandidates) { // [MXAIR2026-ROLL]
+            $vatmexAiracMarkerOk = true; // [MXAIR2026-ROLL]
+            $vatmexAiracMarkerPath = $xmlCandidates[0]; // [MXAIR2026-ROLL]
+        }
+    }
+} // [MXAIR2026-ROLL]
+if (!$vatmexRepoOk) { // [MXAIR2026-ROLL]
+    $warnings[] = 'VATMEX repo path missing or unreadable.'; // [MXAIR2026-ROLL]
+} elseif (!$vatmexMarkerOk) { // [MXAIR2026-ROLL]
+    $warnings[] = 'VATMEX repo marker missing (README).'; // [MXAIR2026-ROLL]
+}
+if (!$vatmexAiracOk) { // [MXAIR2026-ROLL]
+    $warnings[] = 'VATMEX AIRAC path missing or unreadable.'; // [MXAIR2026-ROLL]
+} elseif (!$vatmexAiracMarkerOk) { // [MXAIR2026-ROLL]
+    $warnings[] = 'VATMEX AIRAC marker missing (README/XML).'; // [MXAIR2026-ROLL]
 }
 
 $airacLogPath = $dataDir . '/airac_update.log';
@@ -226,6 +258,8 @@ echo json_encode([
         'vatmex_airac_ok' => $vatmexAiracOk, // [MXAIR2026-ROLL]
         'vatmex_marker_ok' => $vatmexMarkerOk, // [MXAIR2026-ROLL]
         'vatmex_marker_path' => $vatmexMarkerPath, // [MXAIR2026-ROLL]
+        'vatmex_airac_marker_ok' => $vatmexAiracMarkerOk, // [MXAIR2026-ROLL]
+        'vatmex_airac_marker_path' => $vatmexAiracMarkerPath, // [MXAIR2026-ROLL]
         'airac_cycle' => $airacCycle,
         'admin_token_configured' => $airacTokenConfigured,
         'ip_allowlist' => $airacAllowlist,
