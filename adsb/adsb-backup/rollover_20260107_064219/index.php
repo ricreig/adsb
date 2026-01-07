@@ -18,19 +18,6 @@ if ($base === '/') {
 } else {
     $base .= '/';
 }
-// Conservative CSP to reduce third-party execution. // [MXAIR2026-ROLL]
-// TODO: remove 'unsafe-inline' once inline scripts/styles are migrated. // [MXAIR2026-ROLL]
-$csp = "default-src 'self'; " // [MXAIR2026-ROLL]
-    . "base-uri 'self'; " // [MXAIR2026-ROLL]
-    . "form-action 'self'; " // [MXAIR2026-ROLL]
-    . "frame-ancestors 'self'; " // [MXAIR2026-ROLL]
-    . "object-src 'none'; " // [MXAIR2026-ROLL]
-    . "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; " // [MXAIR2026-ROLL]
-    . "style-src 'self' 'unsafe-inline' https://unpkg.com; " // [MXAIR2026-ROLL]
-    . "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://tiles.stadiamaps.com; " // [MXAIR2026-ROLL]
-    . "connect-src 'self' https://api.airplanes.live https://airplanes.live https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://tiles.stadiamaps.com; " // [MXAIR2026-ROLL]
-    . "font-src 'self' data:;"; // [MXAIR2026-ROLL]
-header("Content-Security-Policy: {$csp}"); // [MXAIR2026-ROLL]
 
 // Discover available GeoJSON layers.  Each file in the configured
 // directory becomes an entry in the layers list.  Files should be
@@ -685,13 +672,13 @@ if (is_dir($geojsonDir)) {
                     </label>
                 </div>
                 <div class="settings-section">
-                    <strong>AIRAC</strong> <!-- [MXAIR2026-ROLL] -->
+                    <strong>AIRAC / VATMEX</strong>
                     <div style="margin-top:6px;">
-                        <button id="airacUpdateBtn" style="width:100%;">UPDATE AIRAC (PULL DATA + REBUILD GEOJSON)</button> <!-- [MXAIR2026-ROLL] -->
+                        <button id="airacUpdateBtn" style="width:100%;">UPDATE AIRAC (PULL VATMEX + REBUILD GEOJSON)</button>
                         <span id="airacSpinner" class="spinner" style="display:none;"></span>
                     </div>
                     <div id="airacHint" style="margin-top:6px;font-size:12px;color:#9fb3c8;">
-                        Configura las rutas AIRAC y habilita <code>airac_update_enabled</code> en <code>config.php</code> para activar el botón. <!-- [MXAIR2026-ROLL] -->
+                        Configura <code>vatmex_repo_dir</code> (o <code>vatmex_dir</code>) y habilita <code>airac_update_enabled</code> en <code>config.php</code> para activar el botón.
                     </div>
                     <div id="airacConsole" class="console-box" style="margin-top:6px;display:none;"></div>
                 </div>
@@ -1124,16 +1111,16 @@ if (is_dir($geojsonDir)) {
     }
 
     async function loadLeaflet() {
-        const urls = [ // [MXAIR2026-ROLL]
-            { // [MXAIR2026-ROLL]
-                url: buildUrl('assets/vendor/leaflet/leaflet.js'), // [MXAIR2026-ROLL]
-            }, // [MXAIR2026-ROLL]
-            { // [MXAIR2026-ROLL]
-                url: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', // [MXAIR2026-ROLL]
-            }, // [MXAIR2026-ROLL]
-            { // [MXAIR2026-ROLL]
-                url: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js', // [MXAIR2026-ROLL]
-            }, // [MXAIR2026-ROLL]
+        const urls = [
+            {
+                url: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+            },
+            {
+                url: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+            },
+            {
+                url: buildUrl('assets/vendor/leaflet/leaflet.js'),
+            },
         ];
         const attempted = [];
         const failures = [];
@@ -2131,7 +2118,8 @@ if (is_dir($geojsonDir)) {
         const status = getFlightStatus(flightId);
         const note = ac.note || stripNotes[flightId] || '';
         const callsign = ac.flight ? ac.flight.trim().toUpperCase() : (ac.hex || flightId);
-        const reg = ac.reg ? ac.reg.trim().toUpperCase() : ''; // [MXAIR2026-ROLL]
+        const reg = ac.reg ? ac.reg.trim().toUpperCase() : ''; // [MXAIR2026]
+        const reg = ac.reg ? ac.reg.trim().toUpperCase() : ''; // [MXAIR2026]
         const alt = ac.alt ? `${ac.alt}FT` : '---';
         const gs = ac.gs ? `${ac.gs}KT` : '---';
         const trk = ac.track ? `${ac.track}°` : '---';
@@ -3289,8 +3277,8 @@ if (is_dir($geojsonDir)) {
         airacUpdateBtn.disabled = !airacReady;
         if (airacHint) {
             airacHint.textContent = airacReady
-                ? `Listo para actualizar AIRAC${airacCycle ? ` (AIRAC ${airacCycle})` : ''}.` // [MXAIR2026-ROLL]
-                : 'Configura las rutas AIRAC y habilita airac_update_enabled en config.php para activar el botón.'; // [MXAIR2026-ROLL]
+                ? `Listo para actualizar AIRAC desde VATMEX${airacCycle ? ` (AIRAC ${airacCycle})` : ''}.`
+                : 'Configura vatmex_repo_dir/vatmex_dir y habilita airac_update_enabled en config.php para activar el botón.';
         }
     }
 
@@ -3501,8 +3489,8 @@ if (is_dir($geojsonDir)) {
                     `Started: ${data.started_at}`,
                     `Finished: ${data.finished_at}`,
                     data.airac_cycle ? `AIRAC: ${data.airac_cycle}` : null,
-                    data.vatmex_repo_dir ? `AIRAC repo: ${data.vatmex_repo_dir}` : null, // [MXAIR2026-ROLL]
-                    data.vatmex_airac_dir ? `AIRAC dir: ${data.vatmex_airac_dir}` : null, // [MXAIR2026-ROLL]
+                    data.vatmex_repo_dir ? `VATMEX repo: ${data.vatmex_repo_dir}` : null,
+                    data.vatmex_airac_dir ? `VATMEX AIRAC dir: ${data.vatmex_airac_dir}` : null,
                     '',
                     'STDOUT:',
                     data.stdout || '(empty)',

@@ -123,30 +123,6 @@ $vatmexAirac = $config['vatmex_airac_dir'] ?? null;
 $airacCycle = $config['last_airac_cycle'] ?? null;
 $airacTokenConfigured = !empty($config['airac_update_token']);
 $airacAllowlist = $config['airac_update_ip_allowlist'] ?? [];
-// Validate VATMEX/AIRAC paths. // [MXAIR2026-ROLL]
-$vatmexRepoOk = is_string($vatmexRepo) && $vatmexRepo !== '' && is_dir($vatmexRepo); // [MXAIR2026-ROLL]
-$vatmexAiracOk = is_string($vatmexAirac) && $vatmexAirac !== '' && is_dir($vatmexAirac); // [MXAIR2026-ROLL]
-$vatmexMarkerOk = false; // [MXAIR2026-ROLL]
-$vatmexMarkerPath = null; // [MXAIR2026-ROLL]
-if ($vatmexRepoOk) { // [MXAIR2026-ROLL]
-    $markerCandidates = [ // [MXAIR2026-ROLL]
-        $vatmexRepo . '/README.md', // [MXAIR2026-ROLL]
-        $vatmexRepo . '/README', // [MXAIR2026-ROLL]
-    ]; // [MXAIR2026-ROLL]
-    foreach ($markerCandidates as $candidate) { // [MXAIR2026-ROLL]
-        if (is_file($candidate) && is_readable($candidate)) { // [MXAIR2026-ROLL]
-            $contents = file_get_contents($candidate); // [MXAIR2026-ROLL]
-            if ($contents !== false) { // [MXAIR2026-ROLL]
-                $vatmexMarkerOk = true; // [MXAIR2026-ROLL]
-                $vatmexMarkerPath = $candidate; // [MXAIR2026-ROLL]
-                break; // [MXAIR2026-ROLL]
-            }
-        }
-    }
-} // [MXAIR2026-ROLL]
-if (!$vatmexRepoOk || !$vatmexAiracOk || !$vatmexMarkerOk) { // [MXAIR2026-ROLL]
-    $warnings[] = 'VATMEX path misconfigured.'; // [MXAIR2026-ROLL]
-}
 
 $airacLogPath = $dataDir . '/airac_update.log';
 $airacStatus = null;
@@ -222,10 +198,6 @@ echo json_encode([
         'update_enabled' => (bool)($config['airac_update_enabled'] ?? false),
         'vatmex_repo_dir' => $vatmexRepo,
         'vatmex_airac_dir' => $vatmexAirac,
-        'vatmex_repo_ok' => $vatmexRepoOk, // [MXAIR2026-ROLL]
-        'vatmex_airac_ok' => $vatmexAiracOk, // [MXAIR2026-ROLL]
-        'vatmex_marker_ok' => $vatmexMarkerOk, // [MXAIR2026-ROLL]
-        'vatmex_marker_path' => $vatmexMarkerPath, // [MXAIR2026-ROLL]
         'airac_cycle' => $airacCycle,
         'admin_token_configured' => $airacTokenConfigured,
         'ip_allowlist' => $airacAllowlist,

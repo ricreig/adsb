@@ -3,23 +3,6 @@
 // Adjust these values to suit your environment.  All files and endpoints
 // referenced here are relative to the root of the project directory.
 
-$vatmexBaseDir = __DIR__ . '/vatmex'; // [MXAIR2026-ROLL]
-$vatmexRepoDefault = is_dir($vatmexBaseDir) ? $vatmexBaseDir : null; // [MXAIR2026-ROLL]
-$vatmexAiracDefault = null; // [MXAIR2026-ROLL]
-if ($vatmexRepoDefault !== null) { // [MXAIR2026-ROLL]
-    $airacCandidates = [ // [MXAIR2026-ROLL]
-        $vatmexBaseDir . '/airac', // [MXAIR2026-ROLL]
-        $vatmexBaseDir . '/AIRAC', // [MXAIR2026-ROLL]
-        $vatmexBaseDir . '/data/airac', // [MXAIR2026-ROLL]
-    ]; // [MXAIR2026-ROLL]
-    foreach ($airacCandidates as $candidate) { // [MXAIR2026-ROLL]
-        if (is_dir($candidate)) { // [MXAIR2026-ROLL]
-            $vatmexAiracDefault = $candidate; // [MXAIR2026-ROLL]
-            break; // [MXAIR2026-ROLL]
-        }
-    }
-} // [MXAIR2026-ROLL]
-
 $config = [
     // Primary airport reference (UI only).
     'airport' => [
@@ -126,11 +109,11 @@ $config = [
     'track_history_max_age_s' => 300,
 
     // VATMEX AIRAC update settings. The directory is configured on the server.
-    'vatmex_dir' => $vatmexRepoDefault, // [MXAIR2026-ROLL]
+    'vatmex_dir' => null,
     // VATMEX repo root (used for git pull). If omitted, vatmex_dir is used.
-    'vatmex_repo_dir' => $vatmexRepoDefault, // [MXAIR2026-ROLL]
+    'vatmex_repo_dir' => null,
     // Detected AIRAC data directory inside VATMEX (auto-updated by updater).
-    'vatmex_airac_dir' => $vatmexAiracDefault, // [MXAIR2026-ROLL]
+    'vatmex_airac_dir' => null,
     'airac_update_enabled' => false,
     // Admin protection for AIRAC update (optional).
     'airac_update_token' => null,
